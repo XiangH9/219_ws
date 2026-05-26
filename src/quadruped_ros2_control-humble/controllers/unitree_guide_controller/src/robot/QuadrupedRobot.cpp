@@ -127,6 +127,15 @@ void QuadrupedRobot::update() {
         vel_array(2) = ctrl_interfaces_.joint_velocity_state_interface_[i * 3 + 2].get().get_value();
         current_joint_vel_[i] = vel_array;
     }
+
+    RCLCPP_INFO_THROTTLE(
+        ctrl_interfaces_.node->get_logger(),
+        *ctrl_interfaces_.node->get_clock(),
+        2000,
+        "[QuadrupedRobot::update] hip q=%.3f dq=%.3f | thigh q=%.3f dq=%.3f | calf q=%.3f dq=%.3f",
+        current_joint_pos_[0](0), current_joint_vel_[0](0),
+        current_joint_pos_[0](1), current_joint_vel_[0](1),
+        current_joint_pos_[0](2), current_joint_vel_[0](2));
 }
 
 

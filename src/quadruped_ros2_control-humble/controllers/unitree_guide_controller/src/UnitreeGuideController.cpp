@@ -10,6 +10,10 @@
 
 #include <Eigen/Geometry>
 
+//Gazebo
+#include <sstream>
+#include <iomanip>
+
 namespace unitree_guide_controller
 {
     using config_type = controller_interface::interface_configuration_type;
@@ -165,7 +169,24 @@ namespace unitree_guide_controller
         // 2026.04.28关键修改：把状态机的更新放在最后，否则会漏掉一拍新状态
         if (mode_ == FSMMode::NORMAL)
         {
+            RCLCPP_INFO_THROTTLE(
+                get_node()->get_logger(),
+                *get_node()->get_clock(),
+                2000,
+                "[fsm-before-check] current=%s mode=%s cmd=%d",
+                current_state_->state_name_string.c_str(),
+                mode_ == FSMMode::NORMAL ? "NORMAL" : "CHANGE",
+                ctrl_interfaces_.control_inputs_.command);
+
             next_state_name_ = current_state_->checkChange();
+
+            RCLCPP_INFO_THROTTLE(
+                get_node()->get_logger(),
+                *get_node()->get_clock(),
+                2000,
+                "[fsm-after-check] current=%s next=%d",
+                current_state_->state_name_string.c_str(),
+                static_cast<int>(next_state_name_));
 
             if (next_state_name_ != current_state_->state_name)
             {
@@ -177,6 +198,49 @@ namespace unitree_guide_controller
             else
             {
                 current_state_->run(time, period);
+
+                if (ctrl_interfaces_.joint_position_command_interface_.size() >= 3 &&
+                    ctrl_interfaces_.joint_velocity_command_interface_.size() >= 3 &&
+                    ctrl_interfaces_.joint_torque_command_interface_.size() >= 3 &&
+                    ctrl_interfaces_.joint_kp_command_interface_.size() >= 3 &&
+                    ctrl_interfaces_.joint_kd_command_interface_.size() >= 3 &&
+                    ctrl_interfaces_.joint_position_state_interface_.size() >= 3 &&
+                    ctrl_interfaces_.joint_velocity_state_interface_.size() >= 3)
+                {
+                    RCLCPP_INFO_THROTTLE(
+                        get_node()->get_logger(),
+                        *get_node()->get_clock(),
+                        2000,
+                        "[run-out] state=%s | "
+                        "hip cmd(q=%.3f dq=%.3f tau=%.3f kp=%.1f kd=%.1f) q=%.3f dq=%.3f | "
+                        "thigh cmd(q=%.3f dq=%.3f tau=%.3f kp=%.1f kd=%.1f) q=%.3f dq=%.3f | "
+                        "calf cmd(q=%.3f dq=%.3f tau=%.3f kp=%.1f kd=%.1f) q=%.3f dq=%.3f",
+                        current_state_->state_name_string.c_str(),
+
+                        ctrl_interfaces_.joint_position_command_interface_[0].get().get_value(),
+                        ctrl_interfaces_.joint_velocity_command_interface_[0].get().get_value(),
+                        ctrl_interfaces_.joint_torque_command_interface_[0].get().get_value(),
+                        ctrl_interfaces_.joint_kp_command_interface_[0].get().get_value(),
+                        ctrl_interfaces_.joint_kd_command_interface_[0].get().get_value(),
+                        ctrl_interfaces_.joint_position_state_interface_[0].get().get_value(),
+                        ctrl_interfaces_.joint_velocity_state_interface_[0].get().get_value(),
+
+                        ctrl_interfaces_.joint_position_command_interface_[1].get().get_value(),
+                        ctrl_interfaces_.joint_velocity_command_interface_[1].get().get_value(),
+                        ctrl_interfaces_.joint_torque_command_interface_[1].get().get_value(),
+                        ctrl_interfaces_.joint_kp_command_interface_[1].get().get_value(),
+                        ctrl_interfaces_.joint_kd_command_interface_[1].get().get_value(),
+                        ctrl_interfaces_.joint_position_state_interface_[1].get().get_value(),
+                        ctrl_interfaces_.joint_velocity_state_interface_[1].get().get_value(),
+
+                        ctrl_interfaces_.joint_position_command_interface_[2].get().get_value(),
+                        ctrl_interfaces_.joint_velocity_command_interface_[2].get().get_value(),
+                        ctrl_interfaces_.joint_torque_command_interface_[2].get().get_value(),
+                        ctrl_interfaces_.joint_kp_command_interface_[2].get().get_value(),
+                        ctrl_interfaces_.joint_kd_command_interface_[2].get().get_value(),
+                        ctrl_interfaces_.joint_position_state_interface_[2].get().get_value(),
+                        ctrl_interfaces_.joint_velocity_state_interface_[2].get().get_value());
+                }
             }
         }
         else if (mode_ == FSMMode::CHANGE)
@@ -235,7 +299,10 @@ namespace unitree_guide_controller
         control_input_subscription_ = get_node()->create_subscription<control_input_msgs::msg::Inputs>(
             "/control_input", 10, [this](const control_input_msgs::msg::Inputs::SharedPtr msg)
             {
-                // Handle message
+                RCLCPP_INFO(
+                    get_node()->get_logger(),
+                    "[control_input] cmd=%d lx=%.3f ly=%.3f rx=%.3f ry=%.3f",
+                    msg->command, msg->lx, msg->ly, msg->rx, msg->ry);
                 ctrl_interfaces_.control_inputs_.command = msg->command;
                 ctrl_interfaces_.control_inputs_.lx = msg->lx;
                 ctrl_interfaces_.control_inputs_.ly = msg->ly;
@@ -247,10 +314,19 @@ namespace unitree_guide_controller
             "/robot_description", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local(),
             [this](const std_msgs::msg::String::SharedPtr msg)
             {
+                // Initialize the robot model only once. The transient_local
+                // robot_description topic may replay more than once, and
+                // rebuilding these objects can trigger unsafe teardown paths.
+                if (ctrl_component_.robot_model_)
+                {
+                    return;
+                }
+
                 ctrl_component_.robot_model_ = std::make_shared<QuadrupedRobot>(
                     ctrl_interfaces_, msg->data, feet_names_, base_name_);
                 ctrl_component_.balance_ctrl_ = std::make_shared<BalanceCtrl>(ctrl_component_.robot_model_);
                 ctrl_component_.convex_mpc_ = std::make_shared<ConvexMpcSolver>();
+                robot_description_subscription_.reset();
             });
 
         ctrl_component_.wave_generator_ = std::make_shared<WaveGenerator>(0.65, 0.5, Vec4(0, 0.5, 0.5, 0));

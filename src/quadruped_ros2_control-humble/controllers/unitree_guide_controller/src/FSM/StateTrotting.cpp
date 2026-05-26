@@ -3,6 +3,7 @@
 //
 
 #include "unitree_guide_controller/FSM/StateTrotting.h"
+#include <cmath>
 #include <unitree_guide_controller/common/mathTools.h>
 #include <unitree_guide_controller/control/CtrlComponent.h>
 #include <unitree_guide_controller/control/Estimator.h>
@@ -30,7 +31,7 @@ StateTrotting::StateTrotting(CtrlInterfaces &ctrl_interfaces,
     gait_generator_(ctrl_component, this){
 
     troting_kalman = 2;                             //总模式开关【已弃用】
-    force_solver_mode_ = ForceSolverMode::QP;       //总模式开关
+    force_solver_mode_ = ForceSolverMode::MPC;       //总模式开关
 
     hip_q_range = 0.16;                               // 髋关节限制范围（±0.16 rad，约 ±9.2°）
     hip_qd_range = 1.0;                                // 髋关节速度限制（±1.0 rad/s）
@@ -520,6 +521,12 @@ void StateTrotting::calcQQd() {
     const double hip_center = 0.0;    // 髋关节中心位置（0 rad）
     const double hip_min = hip_center - hip_q_range;
     const double hip_max = hip_center + hip_q_range;
+    const double thigh_min = -2.1;
+    const double thigh_max = 4.501;
+    const double calf_min = -2.818;
+    const double calf_max = -0.888;
+    const double thigh_qd_range = 6.0;
+    const double calf_qd_range = 8.0;
 
     // 关节限幅
     for (int leg_idx = 0; leg_idx < 4; ++leg_idx) 
@@ -530,8 +537,32 @@ void StateTrotting::calcQQd() {
 
         // 髋关节位置限幅
         q_goal(hip_idx)  = saturation(q_goal(hip_idx),   Vec2(hip_min,   hip_max));
+        q_goal(thigh_idx) = saturation(q_goal(thigh_idx), Vec2(thigh_min, thigh_max));
+        q_goal(calf_idx)  = saturation(q_goal(calf_idx),  Vec2(calf_min,  calf_max));
         // 髋关节速度限制，防止突然抽动
         qd_goal(hip_idx) = saturation(qd_goal(hip_idx), Vec2(-hip_qd_range, hip_qd_range));
+        qd_goal(thigh_idx) = saturation(qd_goal(thigh_idx), Vec2(-thigh_qd_range, thigh_qd_range));
+        qd_goal(calf_idx) = saturation(qd_goal(calf_idx), Vec2(-calf_qd_range, calf_qd_range));
+
+        if (!std::isfinite(q_goal(hip_idx))) {
+            q_goal(hip_idx) = ctrl_interfaces_.joint_position_state_interface_[hip_idx].get().get_value();
+        }
+        if (!std::isfinite(q_goal(thigh_idx))) {
+            q_goal(thigh_idx) = ctrl_interfaces_.joint_position_state_interface_[thigh_idx].get().get_value();
+        }
+        if (!std::isfinite(q_goal(calf_idx))) {
+            q_goal(calf_idx) = ctrl_interfaces_.joint_position_state_interface_[calf_idx].get().get_value();
+        }
+
+        if (!std::isfinite(qd_goal(hip_idx))) {
+            qd_goal(hip_idx) = 0.0;
+        }
+        if (!std::isfinite(qd_goal(thigh_idx))) {
+            qd_goal(thigh_idx) = 0.0;
+        }
+        if (!std::isfinite(qd_goal(calf_idx))) {
+            qd_goal(calf_idx) = 0.0;
+        }
 
     }
 

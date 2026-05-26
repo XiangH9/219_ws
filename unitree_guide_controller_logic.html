@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UnitreeGuideController 运行逻辑梳理</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --panel: #fffdf8;
+      --ink: #1d2930;
+      --subtle: #5e6d72;
+      --line: #d9d2c5;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --accent-2: #c96d1c;
+      --code: #f4f0e8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      line-height: 1.7;
+      background:
+        radial-gradient(circle at top left, #dff3ef 0, transparent 26rem),
+        linear-gradient(180deg, #f6f2ea 0%, #f2ede4 100%);
+    }
+
+    .page {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 30px 20px 72px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #14373d 0%, #265862 100%);
+      color: #f7fbfb;
+      border-radius: 26px;
+      padding: 30px 32px;
+      box-shadow: 0 18px 40px rgba(20, 55, 61, 0.18);
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: 34px;
+      line-height: 1.15;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 940px;
+      color: rgba(247, 251, 251, 0.88);
+    }
+
+    .section {
+      margin-top: 22px;
+      background: var(--panel);
+      border: 1px solid rgba(217, 210, 197, 0.95);
+      border-radius: 22px;
+      padding: 24px 26px;
+      box-shadow: 0 8px 22px rgba(54, 50, 44, 0.06);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 22px;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 17px;
+    }
+
+    p { margin: 8px 0; }
+
+    ul, ol {
+      margin: 10px 0 0 18px;
+      padding: 0;
+    }
+
+    li + li { margin-top: 6px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-top: 14px;
+    }
+
+    .card {
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: #fffefb;
+    }
+
+    .muted { color: var(--subtle); }
+
+    code {
+      background: var(--code);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 0.93em;
+    }
+
+    pre {
+      margin: 0;
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: #fcfaf4;
+      overflow: auto;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.58;
+      white-space: pre-wrap;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .step {
+      border: 1px solid #cfe3df;
+      background: linear-gradient(180deg, #fcfdfc 0%, #eef7f5 100%);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+
+    .step strong { color: var(--accent); }
+
+    .arrow {
+      text-align: center;
+      font-size: 20px;
+      color: var(--subtle);
+      line-height: 1;
+    }
+
+    .callout {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid #e6c89a;
+      background: #fff3df;
+      color: #874d0b;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      overflow: hidden;
+      border-radius: 14px;
+    }
+
+    .table th,
+    .table td {
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .table th {
+      background: #f2f7f6;
+      color: var(--accent);
+      width: 22%;
+    }
+
+    .footer {
+      margin-top: 26px;
+      font-size: 14px;
+      color: var(--subtle);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <h1>UnitreeGuideController.cpp 运行逻辑梳理</h1>
+      <p>
+        这份文档专门解释
+        <code>src/quadruped_ros2_control-humble/controllers/unitree_guide_controller/src/UnitreeGuideController.cpp</code>
+        的代码结构、生命周期、数据流和控制责任。目标是读完后，能完整理解这个控制器在 Gazebo Classic / ros2_control 框架中的位置和作用。
+      </p>
+    </section>
+
+    <section class="section">
+      <div class="badge">定位</div>
+      <h2>这个文件在整个系统里是什么角色</h2>
+      <p>
+        <code>UnitreeGuideController</code> 是一个继承自
+        <code>controller_interface::ControllerInterface</code> 的 ROS2 控制器插件，
+        它不是 Gazebo 插件，也不是底层硬件接口，而是“高层运动控制器”。
+      </p>
+      <div class="grid">
+        <div class="card">
+          <h3>它负责什么</h3>
+          <ul>
+            <li>声明自己要使用哪些 command/state interfaces</li>
+            <li>创建估计器、机器人模型、平衡控制器和步态器</li>
+            <li>把 ros2_control 接口借出来，装配成内部统一的 <code>CtrlInterfaces</code></li>
+            <li>管理 FSM 状态列表，并每周期驱动当前状态执行</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>它不负责什么</h3>
+          <ul>
+            <li>不直接实现 Gazebo 物理仿真</li>
+            <li>不直接读取 Gazebo 组件</li>
+            <li>不自己创建底层关节接口</li>
+            <li>Classic 模式下不直接算最终 torque 写入 Gazebo 关节，而是经由 <code>leg_pd_controller</code></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">头文件结构</div>
+      <h2>类成员和数据骨架</h2>
+      <p>
+        从头文件
+        <code>include/unitree_guide_controller/UnitreeGuideController.h</code>
+        可以先建立整体结构感。
+      </p>
+      <table class="table">
+        <tr>
+          <th>成员</th>
+          <th>作用</th>
+        </tr>
+        <tr>
+          <td><code>CtrlComponent ctrl_component_</code></td>
+          <td>算法对象容器，里面放 <code>robot_model_</code>、<code>estimator_</code>、<code>balance_ctrl_</code>、<code>wave_generator_</code>、<code>convex_mpc_</code>。</td>
+        </tr>
+        <tr>
+          <td><code>CtrlInterfaces ctrl_interfaces_</code></td>
+          <td>接口容器，里面放 ros2_control 借来的 command/state 接口、控制输入缓存、调试 publisher、节点指针等。</td>
+        </tr>
+        <tr>
+          <td><code>FSMStateList state_list_</code></td>
+          <td>保存所有 FSM 状态对象，比如 <code>passive</code>、<code>fixedDown</code>、<code>fixedStand</code>、<code>trotting</code>。</td>
+        </tr>
+        <tr>
+          <td><code>current_state_ / next_state_</code></td>
+          <td>当前状态和待切换状态。</td>
+        </tr>
+        <tr>
+          <td><code>command_interface_map_</code></td>
+          <td>把接口名 <code>effort/position/velocity/kp/kd</code> 映射到 <code>CtrlInterfaces</code> 中对应的容器。</td>
+        </tr>
+        <tr>
+          <td><code>state_interface_map_</code></td>
+          <td>把 <code>position/velocity/effort</code> 状态口映射到状态容器。</td>
+        </tr>
+        <tr>
+          <td><code>imu_name_ / feet_names_ / base_name_</code></td>
+          <td>告诉控制器：IMU 叫什么、基座叫什么、四只脚叫什么，从而让 URDF/接口和控制代码对齐。</td>
+        </tr>
+      </table>
+      <div class="callout">
+        先把这个类看成一个“总装配器”：它本身不含所有控制算法细节，但负责把接口、参数、模型、状态机和调试工具组织起来。
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">依赖对象</div>
+      <h2><code>CtrlComponent</code> 和 <code>CtrlInterfaces</code> 分别是什么</h2>
+      <div class="grid">
+        <div class="card">
+          <h3><code>CtrlComponent</code></h3>
+          <p class="muted">文件：<code>control/CtrlComponent.h</code></p>
+          <ul>
+            <li><code>robot_model_</code>：机器人运动学/动力学抽象</li>
+            <li><code>estimator_</code>：机身状态估计</li>
+            <li><code>balance_ctrl_</code>：平衡控制</li>
+            <li><code>wave_generator_</code>：步态相位生成器</li>
+            <li><code>convex_mpc_</code>：MPC 求解器</li>
+          </ul>
+          <p>它更像“算法资源仓库”。</p>
+        </div>
+        <div class="card">
+          <h3><code>CtrlInterfaces</code></h3>
+          <p class="muted">文件：<code>libraries/controller_common/include/controller_common/CtrlInterfaces.h</code></p>
+          <ul>
+            <li>关节命令接口：<code>torque/position/velocity/kp/kd</code></li>
+            <li>关节状态接口：<code>position/velocity/effort</code></li>
+            <li>IMU 状态接口</li>
+            <li>控制输入缓存：<code>control_inputs_</code></li>
+            <li>调试发布器和节点指针</li>
+          </ul>
+          <p>它更像“运行时接口总线”。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">生命周期</div>
+      <h2>整个控制器的运行主线</h2>
+      <div class="timeline">
+        <div class="step"><strong>1. on_init()</strong>：声明参数，准备接口类型和估计器。</div>
+        <div class="arrow">↓</div>
+        <div class="step"><strong>2. on_configure()</strong>：建立输入订阅，等待 <code>/robot_description</code>，创建机器人模型、平衡控制器、MPC、步态生成器。</div>
+        <div class="arrow">↓</div>
+        <div class="step"><strong>3. on_activate()</strong>：把 ros2_control 借来的接口分类装入 <code>CtrlInterfaces</code>，创建 FSM 状态对象，初始化当前状态。</div>
+        <div class="arrow">↓</div>
+        <div class="step"><strong>4. update()</strong>：每个控制周期都执行，更新模型、估计器、TF、调试消息和 FSM 状态机。</div>
+        <div class="arrow">↓</div>
+        <div class="step"><strong>5. on_deactivate()/cleanup()/shutdown()</strong>：释放接口，结束生命周期。</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">逐函数解释</div>
+      <h2>核心函数到底做了什么</h2>
+
+      <div class="card" style="margin-top: 10px;">
+        <h3>1. <code>command_interface_configuration()</code></h3>
+        <p>
+          代码位置：<code>UnitreeGuideController.cpp:17-38</code>。
+          它告诉 ros2_control：“我要哪些命令接口”。
+        </p>
+        <ul>
+          <li>遍历 <code>joint_names_</code> 和 <code>command_interface_types_</code></li>
+          <li>如果 <code>command_prefix_</code> 非空，就生成 <code>leg_pd_controller/FR_hip_joint/position</code> 这类带前缀接口名</li>
+          <li>否则直接生成 <code>FR_hip_joint/position</code> 这类接口名</li>
+        </ul>
+        <p>
+          这正是 Gazebo Classic 方案里“主控制器把命令发给 <code>leg_pd_controller</code> 而不是直接发给底层关节”的关键。
+        </p>
+      </div>
+
+      <div class="card" style="margin-top: 12px;">
+        <h3>2. <code>state_interface_configuration()</code></h3>
+        <p>
+          代码位置：<code>UnitreeGuideController.cpp:40-59</code>。
+          它声明自己要读取哪些状态接口。
+        </p>
+        <ul>
+          <li>所有关节的 <code>position/velocity/effort</code></li>
+          <li>IMU 的四元数、角速度、线加速度</li>
+        </ul>
+        <p>
+          后面 <code>on_activate()</code> 真正拿到的 <code>state_interfaces_</code>，就是按这份需求借出来的。
+        </p>
+      </div>
+
+      <div class="card" style="margin-top: 12px;">
+        <h3>3. <code>on_init()</code></h3>
+        <p>
+          代码位置：<code>UnitreeGuideController.cpp:194-230</code>。
+          这是“参数声明和基础对象准备阶段”。
+        </p>
+        <ul>
+          <li>声明并读取 <code>joints</code>、<code>command_interfaces</code>、<code>state_interfaces</code></li>
+          <li>声明并读取 <code>imu_name</code>、<code>base_name</code>、<code>command_prefix</code>、<code>feet_names</code></li>
+          <li>读取站立姿态参数：<code>down_pos</code>、<code>stand_pos</code>、<code>stand_kp</code>、<code>stand_kd</code></li>
+          <li>读取控制频率 <code>update_rate</code> 到 <code>ctrl_interfaces_.frequency_</code></li>
+          <li>创建 <code>Estimator</code> 对象</li>
+        </ul>
+        <p>
+          此时还没有机器人模型，也还没有借到实际接口，所以这里只能做“轻量初始化”。
+        </p>
+      </div>
+
+      <div class="card" style="margin-top: 12px;">
+        <h3>4. <code>on_configure()</code></h3>
+        <p>
+          代码位置：<code>UnitreeGuideController.cpp:232-259</code>。
+          这是“建立运行依赖”的阶段。
+        </p>
+        <ul>
+          <li>订阅 <code>/control_input</code>，把遥控/键盘输入写进 <code>ctrl_interfaces_.control_inputs_</code></li>
+          <li>订阅 <code>/robot_description</code>，收到 URDF 后创建 <code>QuadrupedRobot</code></li>
+          <li>在同一个回调里创建 <code>BalanceCtrl</code> 和 <code>ConvexMpcSolver</code></li>
+          <li>创建 <code>WaveGenerator</code></li>
+        </ul>
+        <p>
+          这里的一个设计重点是：机器人模型不是写死在构造函数里，而是等 <code>robot_description</code> 真正到达后再创建，
+          这样控制器可以根据 launch 时注入的实际 URDF 动态构建模型。
+        </p>
+      </div>
+
+      <div class="card" style="margin-top: 12px;">
+        <h3>5. <code>on_activate()</code></h3>
+        <p>
+          代码位置：<code>UnitreeGuideController.cpp:261-321</code>。
+          这是“正式接通 ros2_control 接口并进入可运行状态”的阶段。
+        </p>
+        <ul>
+          <li>最先设置 <code>ctrl_interfaces_.node</code> 和两个调试 publisher</li>
+          <li>创建 <code>tf_broadcaster_</code></li>
+          <li>调用 <code>ctrl_interfaces_.clear()</code> 清掉旧引用</li>
+          <li>遍历 <code>command_interfaces_</code>，按接口名分类塞到 <code>joint_torque_command_interface_</code>、<code>joint_position_command_interface_</code> 等容器</li>
+          <li>遍历 <code>state_interfaces_</code>，把 IMU 接口和关节接口分开存放</li>
+          <li>创建所有 FSM 状态对象</li>
+          <li>将当前状态初始化为 <code>passive</code>，并调用 <code>enter()</code></li>
+        </ul>
+        <p>
+          这一步完成后，控制器才真正具备“读写接口”和“切换状态”的能力。
+        </p>
+      </div>
+
+      <div class="card" style="margin-top: 12px;">
+        <h3>6. <code>update()</code></h3>
+        <p>
+          代码位置：<code>UnitreeGuideController.cpp:61-192</code>。
+          这是整个文件最核心的周期函数，每个控制周期都会被 <code>controller_manager</code> 调用。
+        </p>
+        <ul>
+          <li>如果 <code>robot_model_</code> 还没准备好，直接返回</li>
+          <li>依次更新 <code>robot_model_</code>、<code>wave_generator_</code>、<code>estimator_</code></li>
+          <li>发布机身 <code>world -> base</code> 的 TF</li>
+          <li>发布调试消息 <code>/body_debug</code></li>
+          <li>最后执行 FSM 调度和状态切换</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">周期数据流</div>
+      <h2><code>update()</code> 每一拍到底发生了什么</h2>
+      <pre>controller_manager 调用 update(time, period)
+        ↓
+检查 robot_model_ 是否已建立
+        ↓
+robot_model_->update()
+  读取关节接口，更新腿运动学和机身相关模型量
+        ↓
+wave_generator_->update()
+  推进步态相位，判断四条腿当前是支撑还是摆动
+        ↓
+estimator_->update()
+  结合 IMU、关节和足端信息估计机身位置/速度/姿态
+        ↓
+发布 TF: world -> base
+        ↓
+发布 body_debug 调试消息
+        ↓
+FSM 调度：
+  NORMAL:
+    先 checkChange()
+    若要切状态 -> mode = CHANGE
+    若不切状态 -> current_state_->run()
+  CHANGE:
+    current_state_->exit()
+    切到 next_state_
+    current_state_->enter()
+    mode = NORMAL</pre>
+      <div class="callout">
+        代码里特意把状态机调度放在 <code>update()</code> 最后，这是作者自己在注释里强调的修改点。这样可以避免新状态“漏掉一拍”。
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">FSM</div>
+      <h2>状态机是怎么挂进来的</h2>
+      <p>
+        头文件里定义了 <code>FSMStateList</code>，里面包含：
+        <code>passive</code>、<code>fixedDown</code>、<code>fixedStand</code>、<code>freeStand</code>、
+        <code>swingTest</code>、<code>balanceTest</code>、<code>trotting</code>。
+      </p>
+      <p>
+        每个状态都继承自 <code>FSMState</code>，必须实现：
+      </p>
+      <ul>
+        <li><code>enter()</code>：进入状态时执行</li>
+        <li><code>run(time, period)</code>：正常运行时每拍执行</li>
+        <li><code>exit()</code>：退出状态时执行</li>
+        <li><code>checkChange()</code>：判断要不要切到别的状态</li>
+      </ul>
+      <p>
+        <code>UnitreeGuideController</code> 自己并不决定 trotting 里每条腿怎么摆，而是把“当前状态要干什么”委托给对应状态类。
+      </p>
+    </section>
+
+    <section class="section">
+      <div class="badge">Classic 特性</div>
+      <h2>为什么这里会出现 <code>command_prefix_</code></h2>
+      <p>
+        这是 Gazebo Classic 路线最重要的适配点之一。
+      </p>
+      <p>
+        在 <code>gazebo.yaml</code> 中，<code>unitree_guide_controller</code> 设置了：
+      </p>
+      <pre>command_prefix: "leg_pd_controller"</pre>
+      <p>
+        所以主控制器申请的命令口实际上会变成：
+      </p>
+      <pre>leg_pd_controller/FR_hip_joint/position
+leg_pd_controller/FR_hip_joint/velocity
+leg_pd_controller/FR_hip_joint/effort
+leg_pd_controller/FR_hip_joint/kp
+leg_pd_controller/FR_hip_joint/kd
+...</pre>
+      <p>
+        这意味着：
+      </p>
+      <ul>
+        <li><code>UnitreeGuideController</code> 输出的是 PD 目标和前馈力矩</li>
+        <li><code>leg_pd_controller</code> 再结合当前状态计算最终 torque</li>
+        <li>最终 torque 才通过底层 <code>effort</code> 接口进入 Gazebo</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <div class="badge">对象关系</div>
+      <h2>控制器内部对象是怎么协作的</h2>
+      <pre>UnitreeGuideController
+├── ctrl_interfaces_
+│   ├── 关节命令接口
+│   ├── 关节状态接口
+│   ├── IMU 状态接口
+│   ├── control_inputs_
+│   └── 调试 publisher / node
+│
+├── ctrl_component_
+│   ├── robot_model_
+│   ├── estimator_
+│   ├── balance_ctrl_
+│   ├── wave_generator_
+│   └── convex_mpc_
+│
+└── FSM
+    ├── current_state_
+    ├── next_state_
+    └── state_list_
+        ├── passive
+        ├── fixedDown
+        ├── fixedStand
+        ├── freeStand
+        ├── swingTest
+        ├── balanceTest
+        └── trotting</pre>
+    </section>
+
+    <section class="section">
+      <div class="badge">理解顺序</div>
+      <h2>如果继续深入，建议这样读</h2>
+      <ol>
+        <li>先读 <code>UnitreeGuideController.h</code>，建立成员结构图。</li>
+        <li>再读 <code>on_init → on_configure → on_activate</code>，理解控制器如何“装配起来”。</li>
+        <li>然后重点读 <code>update()</code>，理解每拍控制主线。</li>
+        <li>接着读 <code>CtrlInterfaces.h</code>，理解接口容器到底装了什么。</li>
+        <li>再读 <code>Estimator.h/.cpp</code> 和 <code>QuadrupedRobot.h/.cpp</code>，理解状态估计和模型更新。</li>
+        <li>最后进入 <code>StateTrotting.cpp</code>，看具体步态控制如何利用这些共享资源。</li>
+      </ol>
+    </section>
+
+    <section class="section">
+      <div class="badge">总结</div>
+      <h2>一句话总结这个文件</h2>
+      <p>
+        <code>UnitreeGuideController.cpp</code> 的本质不是“具体走路算法本体”，而是
+        <strong>高层控制器装配与调度中心</strong>：
+        它负责把 ros2_control 接口、机器人模型、估计器、平衡控制器、步态生成器和 FSM 状态机组织起来，并在每个控制周期按固定顺序驱动它们运行。
+      </p>
+    </section>
+
+    <p class="footer">
+      文件位置：<code>/home/xiangh9/xhros2/219_ws/unitree_guide_controller_logic.html</code><br />
+      如果后续你愿意，我还可以继续生成第二份 HTML，专门讲 <code>StateTrotting.cpp</code> 的控制链和变量含义。
+    </p>
+  </div>
+</body>
+</html>

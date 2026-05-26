@@ -23,6 +23,172 @@ LD_PRELOAD=/lib/x86_64-linux-gnu/libpthread.so.0 QT_QPA_PLATFORM=xcb LD_LIBRARY_
 ```
 
 
+# 1.1 仿真实现分支（Gazebo Classic）
+## 目标
+这套仓库最初主要是围绕真实机器人控制调试起来的。移植到Gazebo Classic之后，最核心的工作不是重写整套FSM，而是把“真机默认成立”的一些前提补齐成“仿真里也成立”。
+
+目前已经确认：
+* `passive -> fixed down -> fixed stand` 站立链路在仿真中已经基本打通
+* 之前“站不起来”的主因不是FSM本身坏掉，而是仿真运行时模型参数、执行层限幅、接触工况和目标姿态之间不匹配
+* 现在新的主问题已经转移到 `trotting` 步态稳定性，而不是站立状态切换
+
+## 一个非常重要的事实
+Gazebo Classic运行时真正使用的是：
+* [robot.xacro](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/descriptions/unitree/go1_description/xacro/robot.xacro)
+* [const.xacro](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/descriptions/unitree/go1_description/xacro/const.xacro)
+* [leg.xacro](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/descriptions/unitree/go1_description/xacro/leg.xacro)
+* [gazebo_classic.xacro](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/descriptions/unitree/go1_description/xacro/gazebo_classic.xacro)
+
+而不是平时更容易打开查看的：
+* [robot.urdf](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/descriptions/unitree/go1_description/urdf/robot.urdf)
+
+因此仿真站不起来、关节限幅、接触参数、Gazebo执行效果，优先应该检查 `xacro` 链，而不是 `urdf`。
+
+## 从真实机器人控制到仿真状态机切换，我们实际做了什么
+### 1. 保证控制器只初始化一次，避免仿真回放消息导致崩溃
+涉及文件：
+* [UnitreeGuideController.cpp](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/controllers/unitree_guide_controller/src/UnitreeGuideController.cpp)
+
+修改原因：
+* 仿真里 `/robot_description` 采用 `transient_local`，可能重复触发回调
+* 原来的写法会重复构造 `QuadrupedRobot / BalanceCtrl / ConvexMpcSolver`
+* 这会在Gazebo里引发重复初始化、`double free`、`gzserver` 崩溃
+
+当前处理：
+* `robot_description` 回调只允许初始化一次
+* 初始化成功后直接释放这个订阅器
+
+### 2. 增加悬挂启动能力，用于验证FSM而不是直接受地面接触干扰
+涉及文件：
+* [gazebo_classic.launch.py](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/controllers/unitree_guide_controller/launch/gazebo_classic.launch.py)
+
+修改原因：
+* 真机调试时可以悬挂起步
+* 仿真默认是一生成就落地，容易把 `calf` 压在下限附近，导致误判为状态机失效
+
+当前处理：
+* 新增 `debug` launch参数
+* 传给 `robot.xacro` 的 `DEBUG`
+* 利用 `robot.xacro` 中 `world -> base` 的固定关节实现悬挂启动
+
+结论：
+* 悬挂实验已经证明 `passive -> fixed down -> fixed stand -> trotting` 这条控制链本身是可运行的
+* 说明原始问题主要在落地接触工况，而不是FSM框架本身
+
+### 3. 恢复仿真运行时关节能力上限
+涉及文件：
+* [const.xacro](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/descriptions/unitree/go1_description/xacro/const.xacro)
+
+关键修改：
+* `hip_torque_max: 1.0 -> 23.7`
+* `thigh_torque_max: 1.0 -> 23.7`
+* `calf_torque_max: 1.0 -> 35.55`
+
+修改原因：
+* `219_ws` 运行时关节 effort limit 一度被写成了 `1.0`
+* 这会导致上层控制虽然给出了姿态和力矩目标，但Gazebo执行层根本发不出足够的关节能力
+* 这是之前“站不起来”的根因之一
+
+### 4. 把站立目标姿态改成适合当前这台仿真机器人，而不是继续沿用原始go1风格目标
+涉及文件：
+* [UnitreeGuideController.h](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/controllers/unitree_guide_controller/include/unitree_guide_controller/UnitreeGuideController.h)
+
+关键修改：
+* `stand_pos_` 调整为四条腿一致的 `{0.0, 0.78, -1.36}`
+* `down_pos_` 调整为四条腿一致的 `{0.0, 1.08, -2.02}`
+
+修改原因：
+* `219_ws` 的几何参数已经不是原始go1尺度
+* 继续沿用旧的 `0.9 / -1.53 / -2.4` 一类目标，会让落地工况下的腿部几何非常不合理
+* 重新匹配当前模型后，`fixed down / fixed stand` 才能在Gazebo里收敛
+
+### 5. 保留 `passive` 原始逻辑，不把它硬改成“半站立状态”
+涉及文件：
+* [StatePassive.cpp](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/libraries/controller_common/src/FSM/StatePassive.cpp)
+* [StatePassive.h](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/libraries/controller_common/include/controller_common/FSM/StatePassive.h)
+
+过程说明：
+* 调试中一度尝试把 `passive` 改成轻控制预备姿态
+* 后续在恢复运行时 torque limit、修正 `stand_pos/down_pos` 之后发现：
+  * 即使 `passive` 恢复为原始 `kp=0, kd=1` 的阻尼态
+  * `fixed down / fixed stand` 也已经能正常带起机器人
+
+当前结论：
+* `passive` 不是导致仿真站不起来的主因
+* 当前保留原始逻辑更接近原仓库语义，也更利于和真机版本对照
+
+### 6. Gazebo执行层接触参数做了仿真友好化调整
+涉及文件：
+* [gazebo_classic.xacro](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/descriptions/unitree/go1_description/xacro/gazebo_classic.xacro)
+
+关键修改：
+* `self_collide` 从 `1` 调为 `0`
+* 接触刚度 `kp` 从 `1e6` 调为 `1e5`
+* 接触阻尼 `kd` 从 `1.0` 调为 `10.0`
+
+修改原因：
+* 原始参数更像真机模型或更硬的接触条件
+* 在Gazebo Classic里容易导致落地起步时腿部接触过硬、`calf` 被锁死在下限附近
+
+说明：
+* 这些修改不是FSM逻辑本身
+* 但它们直接决定状态切换时机器人是否能从落地状态顺利进入 `fixed down / fixed stand`
+
+### 7. trotting步态开始做“仿真防发散”处理
+涉及文件：
+* [StateTrotting.cpp](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/controllers/unitree_guide_controller/src/FSM/StateTrotting.cpp)
+* [GaitGenerator.cpp](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/controllers/unitree_guide_controller/src/gait/GaitGenerator.cpp)
+
+当前已经做的修改：
+* 在 `calcQQd()` 中给 `thigh/calf` 的 `q_goal/qd_goal` 加了限幅
+* 逆解结果出现 `NaN/Inf` 时回退到当前关节位置或零速度
+* 把 `GaitGenerator` 里还在使用的旧名义站姿，统一改成新的 `{0.0, 0.78, -1.36}`
+
+修改原因：
+* 站立问题解决后，新的主问题转移到了 `trotting`
+* 一进入 `trotting`，最先发散的是 `thigh/calf` 的目标轨迹和逆解输出，而不是 `leg_pd_controller` 本身
+
+## 当前仿真分支的状态
+### 已经基本确认有效的修改
+* `UnitreeGuideController.cpp`：只初始化一次机器人模型
+* `const.xacro`：恢复合理 torque limit
+* `UnitreeGuideController.h`：更新 `stand_pos_ / down_pos_`
+* `gazebo_classic.launch.py`：支持悬挂启动 `debug:=true`
+* `gazebo_classic.xacro`：仿真接触参数友好化
+
+### 当前已经不再需要保留的临时思路
+* 把 `passive` 改成预备姿态
+* 单纯靠提高 spawn 高度模拟悬挂
+* 单纯扩大 `urdf/robot.urdf` 里的 effort limit
+
+### 当前主线问题
+* `fixed down / fixed stand` 基本已经正常
+* `trotting` 仍然存在目标轨迹、逆解和接触切换耦合导致的不稳定
+
+## 建议的仿真启动方式
+### 普通仿真
+```
+ros2 launch unitree_guide_controller gazebo_classic.launch.py pkg_description:=go1_description
+```
+
+### 悬挂验证FSM
+```
+ros2 launch unitree_guide_controller gazebo_classic.launch.py pkg_description:=go1_description debug:=true
+```
+
+### 启动前建议彻底清理
+```
+pkill -9 gzserver
+pkill -9 gzclient
+pkill -9 -f gazebo
+pkill -9 -f spawn_entity.py
+pkill -9 -f robot_state_publisher
+pkill -9 -f controller_manager
+pkill -9 -f spawner
+pkill -9 -f "ros2 launch"
+```
+
+
 # 2. 四足机器人开发过程记录
 ## V1系列
 **V1系列跑通了所有底层硬件通讯和初始机器人数学建模和姿态调试，并完成至troting状态的正常开环运行**

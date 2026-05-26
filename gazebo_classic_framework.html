@@ -1,0 +1,427 @@
+ <!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>219_ws Gazebo Classic Framework</title>
+  <style>
+    :root {
+      --bg: #f5f1e8;
+      --panel: #fffdf8;
+      --ink: #1f2a30;
+      --subtle: #5b6a70;
+      --line: #d6cfc1;
+      --accent: #0e7a6d;
+      --accent-soft: #dff2ee;
+      --warn: #8d4e00;
+      --code: #f2efe7;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top right, #dff2ee 0, transparent 28rem),
+        linear-gradient(180deg, #f7f3ea 0%, #f3eee4 100%);
+      color: var(--ink);
+      line-height: 1.65;
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #11343a 0%, #25525d 100%);
+      color: #f6fbfb;
+      padding: 28px 30px;
+      border-radius: 24px;
+      box-shadow: 0 18px 40px rgba(17, 52, 58, 0.18);
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: 32px;
+      line-height: 1.2;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 900px;
+      color: rgba(246, 251, 251, 0.88);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 18px;
+      margin-top: 22px;
+    }
+
+    .card,
+    .section {
+      background: var(--panel);
+      border: 1px solid rgba(214, 207, 193, 0.9);
+      border-radius: 20px;
+      box-shadow: 0 8px 22px rgba(54, 52, 46, 0.06);
+    }
+
+    .card {
+      padding: 20px 22px;
+    }
+
+    .card h2,
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    .muted {
+      color: var(--subtle);
+    }
+
+    .section {
+      margin-top: 22px;
+      padding: 24px 26px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    code {
+      background: var(--code);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 0.93em;
+    }
+
+    pre {
+      margin: 0;
+      padding: 18px;
+      background: #fcfaf4;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: auto;
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .tree {
+      white-space: pre-wrap;
+    }
+
+    .flow {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .step {
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #fcfdfb 0%, #f0f7f5 100%);
+      border: 1px solid #cde2dd;
+      position: relative;
+    }
+
+    .step strong {
+      color: var(--accent);
+    }
+
+    .arrow {
+      text-align: center;
+      color: var(--subtle);
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .file-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .file {
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #fffefb;
+    }
+
+    .file h3 {
+      margin: 0 0 6px;
+      font-size: 16px;
+    }
+
+    .warn {
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid #e8c58e;
+      background: #fff4df;
+      color: var(--warn);
+    }
+
+    ul {
+      margin: 10px 0 0 18px;
+      padding: 0;
+    }
+
+    li + li {
+      margin-top: 6px;
+    }
+
+    .footer {
+      margin-top: 26px;
+      color: var(--subtle);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <h1>219_ws Gazebo Classic 仿真框架梳理</h1>
+      <p>
+        这份文档围绕 <code>unitree_guide_controller/launch/gazebo_classic.launch.py</code>，
+        把 <code>219_ws</code> 中 Gazebo Classic 仿真的启动链、关键文件职责、控制器连接关系和数据流统一整理出来。
+      </p>
+    </section>
+
+    <div class="grid">
+      <article class="card">
+        <div class="badge">入口</div>
+        <h2>主入口文件</h2>
+        <p><code>src/quadruped_ros2_control-humble/controllers/unitree_guide_controller/launch/gazebo_classic.launch.py</code></p>
+        <p class="muted">
+          负责生成 Gazebo Classic 版本的机器人描述、启动 Gazebo、spawn 机器人，并按顺序加载控制器。
+        </p>
+      </article>
+
+      <article class="card">
+        <div class="badge">模型</div>
+        <h2>模型入口</h2>
+        <p><code>descriptions/unitree/go1_description/xacro/robot.xacro</code></p>
+        <p class="muted">
+          通过 <code>GAZEBO=true</code> 和 <code>CLASSIC=true</code> 选择 <code>gazebo_classic.xacro</code> 这一分支。
+        </p>
+      </article>
+
+      <article class="card">
+        <div class="badge">控制</div>
+        <h2>控制配置</h2>
+        <p><code>descriptions/unitree/go1_description/config/gazebo.yaml</code></p>
+        <p class="muted">
+          定义 <code>controller_manager</code>、<code>leg_pd_controller</code>、<code>unitree_guide_controller</code>、IMU broadcaster 的参数。
+        </p>
+      </article>
+    </div>
+
+    <section class="section">
+      <div class="badge">目录结构</div>
+      <h2>与 Gazebo Classic 相关的代码骨架</h2>
+      <pre class="tree">219_ws/
+├── src/quadruped_ros2_control-humble/
+│   ├── controllers/
+│   │   ├── unitree_guide_controller/
+│   │   │   ├── launch/
+│   │   │   │   ├── gazebo_classic.launch.py   ← Gazebo Classic 启动入口
+│   │   │   │   ├── gazebo.launch.py           ← gz sim 启动入口
+│   │   │   │   └── mujoco.launch.py           ← Mujoco 启动入口
+│   │   │   ├── src/
+│   │   │   │   ├── UnitreeGuideController.cpp ← 主控制器生命周期与 FSM 调度
+│   │   │   │   ├── FSM/                       ← 站立、trotting 等状态逻辑
+│   │   │   │   ├── control/                   ← Estimator / BalanceCtrl / MPC
+│   │   │   │   └── robot/                     ← 机器人模型与腿运动学
+│   │   │   └── unitree_guide_controller.xml   ← pluginlib 导出
+│   │   └── leg_pd_controller/
+│   │       ├── src/LegPdController.cpp        ← 中间 PD 桥接控制器
+│   │       └── leg_pd_controller.xml
+│   ├── descriptions/unitree/go1_description/
+│   │   ├── xacro/
+│   │   │   ├── robot.xacro                    ← 描述总入口
+│   │   │   └── gazebo_classic.xacro           ← Gazebo Classic 专用插件/接口
+│   │   └── config/gazebo.yaml                 ← 控制器参数
+│   └── libraries/controller_common/           ← FSM 基类和通用逻辑
+└── install/                                   ← 编译后包安装位置</pre>
+    </section>
+
+    <section class="section">
+      <div class="badge">启动链</div>
+      <h2>Gazebo Classic 如何被唤起</h2>
+      <div class="flow">
+        <div class="step"><strong>Step 1</strong>：<code>gazebo_classic.launch.py</code> 读取 <code>pkg_description</code> 和 <code>height</code>。</div>
+        <div class="arrow">↓</div>
+        <div class="step"><strong>Step 2</strong>：用 <code>xacro.process_file(..., {"GAZEBO": "true", "CLASSIC": "true"})</code> 生成 Gazebo Classic 版 <code>robot_description</code>。</div>
+        <div class="arrow">↓</div>
+        <div class="step"><strong>Step 3</strong>：启动 <code>gzserver</code>，可选启动 <code>gzclient</code>。</div>
+        <div class="arrow">↓</div>
+        <div class="step"><strong>Step 4</strong>：启动 <code>robot_state_publisher</code>，向 ROS 发布机器人 URDF/TF。</div>
+        <div class="arrow">↓</div>
+        <div class="step"><strong>Step 5</strong>：调用 <code>gazebo_ros/spawn_entity.py</code>，从 <code>robot_description</code> topic 把机器人生成到 Gazebo 世界。</div>
+        <div class="arrow">↓</div>
+        <div class="step"><strong>Step 6</strong>：spawn 完成后，依次加载 <code>leg_pd_controller → joint_state_broadcaster → imu_sensor_broadcaster → unitree_guide_controller</code>。</div>
+        <div class="arrow">↓</div>
+        <div class="step"><strong>Step 7</strong>：<code>unitree_guide_controller</code> 开始跑 FSM，输出参考命令给 <code>leg_pd_controller</code>，再由后者计算最终 torque 写到底层 Gazebo 关节。</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">关键文件</div>
+      <h2>每个文件各负责什么</h2>
+      <div class="file-list">
+        <div class="file">
+          <h3><code>launch/gazebo_classic.launch.py</code></h3>
+          <p>负责整体 orchestration。它不直接实现物理仿真，而是把 Gazebo、机器人描述、spawn 行为和控制器加载顺序串起来。</p>
+          <ul>
+            <li>调用 xacro 生成 Classic 模型</li>
+            <li>启动 <code>gzserver/gzclient</code></li>
+            <li>启动 <code>robot_state_publisher</code></li>
+            <li>spawn 机器人</li>
+            <li>按依赖顺序加载控制器</li>
+          </ul>
+        </div>
+
+        <div class="file">
+          <h3><code>xacro/robot.xacro</code></h3>
+          <p>模型描述总入口。通过启动参数切换仿真后端。</p>
+          <ul>
+            <li><code>GAZEBO=true, CLASSIC=true</code> 时走 <code>gazebo_classic.xacro</code></li>
+            <li><code>GAZEBO=true, CLASSIC=false</code> 时走 <code>gazebo.xacro</code></li>
+            <li><code>GAZEBO=false</code> 时走普通 <code>ros2_control.xacro</code> 或实机链路</li>
+          </ul>
+        </div>
+
+        <div class="file">
+          <h3><code>xacro/gazebo_classic.xacro</code></h3>
+          <p>把机器人变成 Gazebo Classic 可仿真模型的关键文件。</p>
+          <ul>
+            <li>定义 <code>&lt;ros2_control&gt;</code> 里的关节 command/state interface</li>
+            <li>挂载 <code>libgazebo_ros2_control.so</code></li>
+            <li>定义 IMU 传感器和 Gazebo 传感器插件</li>
+            <li>设置摩擦系数、接触参数和碰撞属性</li>
+          </ul>
+        </div>
+
+        <div class="file">
+          <h3><code>config/gazebo.yaml</code></h3>
+          <p>把控制器与接口真正接起来。</p>
+          <ul>
+            <li><code>controller_manager.update_rate = 1000 Hz</code></li>
+            <li><code>leg_pd_controller</code> 读取关节位置速度，输出 effort</li>
+            <li><code>unitree_guide_controller</code> 通过 <code>command_prefix: leg_pd_controller</code> 把 PD 目标写给中间层</li>
+            <li>配置 IMU 名称、足端名称、关节列表和状态接口</li>
+          </ul>
+        </div>
+
+        <div class="file">
+          <h3><code>src/UnitreeGuideController.cpp</code></h3>
+          <p>主控制器生命周期与 FSM 调度中心。</p>
+          <ul>
+            <li><code>on_init()</code> 读取参数和接口配置</li>
+            <li><code>on_configure()</code> 建立输入订阅、模型对象、估计器等</li>
+            <li><code>on_activate()</code> 绑定命令口/状态口，创建各个 FSM 状态</li>
+            <li><code>update()</code> 每周期运行估计器、步态器和当前状态逻辑</li>
+          </ul>
+        </div>
+
+        <div class="file">
+          <h3><code>controllers/leg_pd_controller/src/LegPdController.cpp</code></h3>
+          <p>Classic 方案的中间桥。主控制器不直接给 Gazebo 力矩，而是把 <code>position/velocity/effort/kp/kd</code> 写给它。</p>
+          <ul>
+            <li>读取关节当前位置和速度</li>
+            <li>使用 <code>torque = effort + kp(qd-q) + kd(dqd-dq)</code></li>
+            <li>把最终 torque 写到底层 <code>effort</code> 接口</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">控制数据流</div>
+      <h2>Classic 路线中的控制信号怎么走</h2>
+      <pre>keyboard / topic input
+        ↓
+unitree_guide_controller
+  ├── 读取 joint states
+  ├── 读取 imu states
+  ├── 更新 estimator / gait / FSM
+  └── 输出:
+      position / velocity / effort / kp / kd
+        ↓  (command_prefix = leg_pd_controller)
+leg_pd_controller
+  ├── 读取当前位置 q
+  ├── 读取当前速度 dq
+  └── 计算 torque = tau_ff + kp(qd-q) + kd(dqd-dq)
+        ↓
+gazebo_ros2_control / GazeboSystem
+        ↓
+Gazebo Classic joints</pre>
+    </section>
+
+    <section class="section">
+      <div class="badge">节点关系</div>
+      <h2>运行时主要节点关系</h2>
+      <pre>gazebo_classic.launch.py
+├── gzserver
+├── gzclient (optional)
+├── robot_state_publisher
+├── spawn_entity.py
+└── controller_manager spawner
+    ├── leg_pd_controller
+    ├── joint_state_broadcaster
+    ├── imu_sensor_broadcaster
+    └── unitree_guide_controller</pre>
+      <div class="warn" style="margin-top: 14px;">
+        在 Gazebo Classic 方案里，<code>unitree_guide_controller</code> 不是直接驱动 Gazebo 关节；
+        真正写到底层 <code>effort</code> 接口的是 <code>leg_pd_controller</code>。
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">参数入口</div>
+      <h2>启动参数的实际作用</h2>
+      <ul>
+        <li><code>pkg_description</code>：决定使用哪个描述包，默认是 <code>go1_description</code>。</li>
+        <li><code>height</code>：机器人 spawn 时的初始高度。</li>
+        <li><code>rviz</code>：是否额外启动 RViz。</li>
+        <li><code>gui</code>：是否启动 Gazebo GUI，即 <code>gzclient</code>。</li>
+        <li><code>pause</code>：Gazebo 服务端启动时是否先暂停物理。</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <div class="badge">建议阅读顺序</div>
+      <h2>后续继续深入时，建议这样读代码</h2>
+      <ol>
+        <li>先读 <code>gazebo_classic.launch.py</code>，建立启动链概念。</li>
+        <li>再读 <code>robot.xacro</code>，理解仿真分支选择。</li>
+        <li>再读 <code>gazebo_classic.xacro</code>，理解 Classic 的插件和接口。</li>
+        <li>再读 <code>gazebo.yaml</code>，确认控制器和接口如何对应。</li>
+        <li>最后读 <code>UnitreeGuideController.cpp</code> 和 <code>StateTrotting.cpp</code>，进入控制逻辑本体。</li>
+      </ol>
+    </section>
+
+    <p class="footer">
+      文件位置：<code>/home/xiangh9/xhros2/219_ws/gazebo_classic_framework.html</code><br />
+      这份文档适合作为 Gazebo Classic 方案的总览页，后面如果你愿意，我们还可以继续补一版“逐文件跳转索引”或“FSM 状态关系图”。
+    </p>
+  </div>
+</body>
+</html>

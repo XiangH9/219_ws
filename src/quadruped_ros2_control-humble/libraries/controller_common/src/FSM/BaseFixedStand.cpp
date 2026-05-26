@@ -52,6 +52,16 @@ void BaseFixedStand::enter()
     ctrl_interfaces_.control_inputs_.command = 0;
 
     fixedstand_active_ = true; // 激活状态，允许微调
+    if (ctrl_interfaces_.node)
+    {
+        RCLCPP_INFO(
+            ctrl_interfaces_.node->get_logger(),
+            "[BaseFixedStand::enter] start hip=%.3f thigh=%.3f calf=%.3f | kp=%.1f kd=%.1f | target hip=%.3f thigh=%.3f calf=%.3f",
+            start_pos_[0], start_pos_[1], start_pos_[2],
+            kp_, kd_,
+            target_pos_[0], target_pos_[1], target_pos_[2]);
+    }
+
 }
 
 void BaseFixedStand::run(const rclcpp::Time&/*time*/, const rclcpp::Duration&/*period*/)
@@ -75,6 +85,20 @@ void BaseFixedStand::run(const rclcpp::Time&/*time*/, const rclcpp::Duration&/*p
         }
         ctrl_interfaces_.debug_pub->publish(msg);
     }
+
+    if (ctrl_interfaces_.node)
+    {
+        RCLCPP_INFO_THROTTLE(
+            ctrl_interfaces_.node->get_logger(),
+            *ctrl_interfaces_.node->get_clock(),
+            2000,
+            "[BaseFixedStand::run] percent=%.3f phase=%.3f | "
+            "hip cmd=%.3f q=%.3f | thigh cmd=%.3f q=%.3f | calf cmd=%.3f q=%.3f",
+            percent_, phase,
+            cmd_pos_[0], ctrl_interfaces_.joint_position_state_interface_[0].get().get_value(),
+            cmd_pos_[1], ctrl_interfaces_.joint_position_state_interface_[1].get().get_value(),
+            cmd_pos_[2], ctrl_interfaces_.joint_position_state_interface_[2].get().get_value());
+    }
 }
 
 void BaseFixedStand::exit()
@@ -88,8 +112,28 @@ FSMStateName BaseFixedStand::checkChange()
 {
     if (percent_ < 1.5)
     {
+        if (ctrl_interfaces_.node)
+        {
+            RCLCPP_INFO_THROTTLE(
+                ctrl_interfaces_.node->get_logger(),
+                *ctrl_interfaces_.node->get_clock(),
+                1000,
+                "[BaseFixedStand::checkChange] blocked percent=%.3f cmd=%d",
+                percent_, ctrl_interfaces_.control_inputs_.command);
+        }
         return FSMStateName::FIXEDSTAND;
     }
+
+    if (ctrl_interfaces_.node)
+    {
+        RCLCPP_INFO_THROTTLE(
+            ctrl_interfaces_.node->get_logger(),
+            *ctrl_interfaces_.node->get_clock(),
+            2000,
+            "[BaseFixedStand::checkChange] percent=%.3f cmd=%d",
+            percent_, ctrl_interfaces_.control_inputs_.command);
+    }
+    
     switch (ctrl_interfaces_.control_inputs_.command)
     {
     case 1:

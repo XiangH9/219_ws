@@ -7,6 +7,7 @@
 
 #include <controller_interface/controller_interface.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/float64_multi_array.hpp>
 #include <controller_common/FSM/FSMState.h>
 #include <controller_common/FSM/StatePassive.h>
 #include <controller_common/FSM/StateFixedDown.h>
@@ -82,17 +83,17 @@ namespace unitree_guide_controller {
 
         // FR FL RR RL
         std::vector<double> stand_pos_ = {
-            0.0, 0.9, -1.53,
-            0.0, 0.9, -1.53,
-            0.0, 0.9, -1.3,
-            0.0, 0.9, -1.3
+            0.0, 0.78, -1.36,
+            0.0, 0.78, -1.36,
+            0.0, 0.78, -1.36,
+            0.0, 0.78, -1.36
         };
 
         std::vector<double> down_pos_ = {
-            0.0, 1.3, -2.4,
-            0.0, 1.3, -2.4,
-            0.0, 1.3, -2.4,
-            0.0, 1.3, -2.4
+            0.0, 1.08, -2.02,
+            0.0, 1.08, -2.02,
+            0.0, 1.08, -2.02,
+            0.0, 1.08, -2.02
         };
 
         double stand_kp_ = 260.0;
@@ -101,9 +102,6 @@ namespace unitree_guide_controller {
         rclcpp::Subscription<control_input_msgs::msg::Inputs>::SharedPtr control_input_subscription_;
         rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robot_description_subscription_;
         std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-
-
-
         std::unordered_map<
             std::string, std::vector<std::reference_wrapper<hardware_interface::LoanedCommandInterface> > *>
         command_interface_map_ = {

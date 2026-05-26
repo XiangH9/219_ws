@@ -51,10 +51,10 @@ void GaitGenerator::generate(Vec34 &feet_pos, Vec34 &feet_vel) {
             // 同时记录“当时那一刻”的 B 系名义足底位置
             // 以后摆动终点就往这个名义位置回
             static const double nominal_q[4][3] = {
-                {0.0, 0.9, -1.53},  // FR
-                {0.0, 0.9, -1.53},  // FL
-                {0.0, 0.9, -1.30},  // RR
-                {0.0, 0.9, -1.30}   // RL
+                {0.0, 0.78, -1.36},  // FR
+                {0.0, 0.78, -1.36},  // FL
+                {0.0, 0.78, -1.36},  // RR
+                {0.0, 0.78, -1.36}   // RL
             };
 
             for (int leg = 0; leg < 4; ++leg)
@@ -82,10 +82,10 @@ void GaitGenerator::generate(Vec34 &feet_pos, Vec34 &feet_vel) {
 
                 // FR FL RR RL
                 static const double stand_q[4][3] = {
-                    {0.0, 0.9, -1.53},  // FR
-                    {0.0, 0.9, -1.53},  // FL
-                    {0.0, 0.9, -1.3 },  // RR
-                    {0.0, 0.9, -1.3 }   // RL
+                    {0.0, 0.78, -1.36},  // FR
+                    {0.0, 0.78, -1.36},  // FL
+                    {0.0, 0.78, -1.36},  // RR
+                    {0.0, 0.78, -1.36}   // RL
                 };
 
                 fixed_q(0) = stand_q[i][0];
