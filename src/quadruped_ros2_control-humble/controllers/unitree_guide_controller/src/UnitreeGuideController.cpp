@@ -314,19 +314,10 @@ namespace unitree_guide_controller
             "/robot_description", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local(),
             [this](const std_msgs::msg::String::SharedPtr msg)
             {
-                // Initialize the robot model only once. The transient_local
-                // robot_description topic may replay more than once, and
-                // rebuilding these objects can trigger unsafe teardown paths.
-                if (ctrl_component_.robot_model_)
-                {
-                    return;
-                }
-
                 ctrl_component_.robot_model_ = std::make_shared<QuadrupedRobot>(
                     ctrl_interfaces_, msg->data, feet_names_, base_name_);
                 ctrl_component_.balance_ctrl_ = std::make_shared<BalanceCtrl>(ctrl_component_.robot_model_);
                 ctrl_component_.convex_mpc_ = std::make_shared<ConvexMpcSolver>();
-                robot_description_subscription_.reset();
             });
 
         ctrl_component_.wave_generator_ = std::make_shared<WaveGenerator>(0.65, 0.5, Vec4(0, 0.5, 0.5, 0));
