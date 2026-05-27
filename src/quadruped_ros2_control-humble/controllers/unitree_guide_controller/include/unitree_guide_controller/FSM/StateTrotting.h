@@ -122,7 +122,7 @@ private:
     int publish_counter_ = 0;
 
 
-    bool first_run = true; // 新增：是否第一次进入trotting状态的标志
+    bool first_run = true; // 是否第一次进入trotting状态的标志
 
     // MPC足底接触点记忆：记录每条腿最近一次进入支撑相时的足底世界坐标
     Vec34 mpc_foot_hold_G_;

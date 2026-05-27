@@ -51,10 +51,10 @@ void GaitGenerator::generate(Vec34 &feet_pos, Vec34 &feet_vel) {
             // 同时记录“当时那一刻”的 B 系名义足底位置
             // 以后摆动终点就往这个名义位置回
             static const double nominal_q[4][3] = {
-                {0.0, 0.78, -1.36},  // FR
-                {0.0, 0.78, -1.36},  // FL
-                {0.0, 0.78, -1.36},  // RR
-                {0.0, 0.78, -1.36}   // RL
+                {0.0, 0.9, -1.53},  // FR
+                {0.0, 0.9, -1.53},  // FL
+                {0.0, 0.9, -1.53},  // RR
+                {0.0, 0.9, -1.53}   // RL
             };
 
             for (int leg = 0; leg < 4; ++leg)
@@ -82,10 +82,10 @@ void GaitGenerator::generate(Vec34 &feet_pos, Vec34 &feet_vel) {
 
                 // FR FL RR RL
                 static const double stand_q[4][3] = {
-                    {0.0, 0.78, -1.36},  // FR
-                    {0.0, 0.78, -1.36},  // FL
-                    {0.0, 0.78, -1.36},  // RR
-                    {0.0, 0.78, -1.36}   // RL
+                    {0.0, 0.9, -1.53},  // FR
+                    {0.0, 0.9, -1.53},  // FL
+                    {0.0, 0.9, -1.53},  // RR
+                    {0.0, 0.9, -1.53}   // RL
                 };
 
                 fixed_q(0) = stand_q[i][0];
@@ -174,7 +174,6 @@ void GaitGenerator::generate(Vec34 &feet_pos, Vec34 &feet_vel) {
                 next_step(1) = body_vel_global(1) * (1.0 - wave_generator_->phase_(i)) * t_swing
                             + body_vel_global(1) * t_stance / 2.0
                             + k_y * (body_vel_global(1) - vxy_goal_(1));
-
                 // 给速度预测项限幅，防止一步修太猛
                 next_step(0) = saturation(next_step(0), Vec2(-0.035, 0.035));
                 next_step(1) = saturation(next_step(1), Vec2(-0.035, 0.035)); 
@@ -185,10 +184,8 @@ void GaitGenerator::generate(Vec34 &feet_pos, Vec34 &feet_vel) {
                 double next_yaw = d_yaw * (1.0 - wave_generator_->phase_(i)) * t_swing
                     + d_yaw * t_stance / 2.0
                     + k_yaw * (d_yaw_goal_ - d_yaw);
-
                 // yaw 预测也限一下，防止 cos/sin 的目标点跳太远
                 next_yaw = saturation(next_yaw, Vec2(-0.1, 0.1));
-                
 
                 const double feet_radius =
                 sqrt(pow(nominal_feet_body_(0, i), 2) + pow(nominal_feet_body_(1, i), 2));

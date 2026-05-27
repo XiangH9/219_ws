@@ -3,7 +3,6 @@
 //
 
 #include "unitree_guide_controller/FSM/StateTrotting.h"
-#include <cmath>
 #include <unitree_guide_controller/common/mathTools.h>
 #include <unitree_guide_controller/control/CtrlComponent.h>
 #include <unitree_guide_controller/control/Estimator.h>
@@ -138,7 +137,22 @@ void StateTrotting::run(const rclcpp::Time &/*time*/, const rclcpp::Duration &/*
      */
     gait_generator_.setGait(vel_target_.segment(0, 2), w_cmd_global_(2), gait_height_);
     gait_generator_.generate(pos_feet_goal_G, vel_feet_goal_G);
-    
+
+    RCLCPP_INFO_THROTTLE(
+        ctrl_interfaces_.node->get_logger(),
+        *ctrl_interfaces_.node->get_clock(),
+        1000,
+        "[Trotting::wave] status=%d contact=[%d %d %d %d] phase=[%.2f %.2f %.2f %.2f] "
+        "v_cmd_body=(%.3f %.3f %.3f) vel_target=(%.3f %.3f %.3f) yaw_cmd=%.3f dyaw_cmd=%.3f",
+        static_cast<int>(wave_generator_->status_),
+        wave_generator_->contact_(0), wave_generator_->contact_(1),
+        wave_generator_->contact_(2), wave_generator_->contact_(3),
+        wave_generator_->phase_(0), wave_generator_->phase_(1),
+        wave_generator_->phase_(2), wave_generator_->phase_(3),
+        v_cmd_body_(0), v_cmd_body_(1), v_cmd_body_(2),
+        vel_target_(0), vel_target_(1), vel_target_(2),
+        yaw_cmd_, d_yaw_cmd_);
+
     calcTau();                                      // 动力学计算总函数（核心）
     calcQQd();                                      // 运动学计算总函数（核心)
 
@@ -319,6 +333,7 @@ void StateTrotting::calcTau() {
     // 机身x/y/z 平面闭环 PD控制
     pos_error_ = pcd_ - pos_body_;
     vel_error_ = vel_target_ - vel_body_;
+
     dd_pcd = Kpp * pos_error_ + Kdp * vel_error_;
     dd_pcd(0) = saturation(dd_pcd(0), Vec2(-dd_pcb_saturation(0), dd_pcb_saturation(0)));
     dd_pcd(1) = saturation(dd_pcd(1), Vec2(-dd_pcb_saturation(1), dd_pcb_saturation(1)));
@@ -450,6 +465,59 @@ void StateTrotting::calcTau() {
     // 将足端力从P系转换为B系
     force_feet_B = P2B_RotMat * force_feet_P;
 
+    for (int leg = 0; leg < 4; ++leg) {
+        if (wave_generator_->contact_(leg) == 1) {
+            RCLCPP_INFO_THROTTLE(
+                ctrl_interfaces_.node->get_logger(),
+                *ctrl_interfaces_.node->get_clock(),
+                1000,
+                "[Trotting::support-force] leg=%d pos_err=(%.3f %.3f %.3f) vel_err=(%.3f %.3f %.3f) "
+                "dd_pcd=(%.3f %.3f %.3f) d_wbd=(%.3f %.3f %.3f) force_P=(%.3f %.3f %.3f) force_B=(%.3f %.3f %.3f)",
+                leg,
+                pos_error_(0), pos_error_(1), pos_error_(2),
+                vel_error_(0), vel_error_(1), vel_error_(2),
+                dd_pcd(0), dd_pcd(1), dd_pcd(2),
+                d_wbd(0), d_wbd(1), d_wbd(2),
+                force_feet_P(0, leg), force_feet_P(1, leg), force_feet_P(2, leg),
+                force_feet_B(0, leg), force_feet_B(1, leg), force_feet_B(2, leg));
+            break;
+        }
+    }
+
+    for (int leg = 0; leg < 4; ++leg) {
+        if (wave_generator_->contact_(leg) == 0) {
+            const Vec34 &start_feet_G = gait_generator_.getStartFeetPos();
+            const Vec34 &end_feet_G = gait_generator_.getEndFeetPos();
+            RCLCPP_INFO_THROTTLE(
+                ctrl_interfaces_.node->get_logger(),
+                *ctrl_interfaces_.node->get_clock(),
+                1000,
+                "[Trotting::swing-plan] leg=%d start_G=(%.3f %.3f %.3f) end_G=(%.3f %.3f %.3f) "
+                "goal_G=(%.3f %.3f %.3f) goal_v_G=(%.3f %.3f %.3f) actual_G=(%.3f %.3f %.3f) actual_v_G=(%.3f %.3f %.3f)",
+                leg,
+                start_feet_G(0, leg), start_feet_G(1, leg), start_feet_G(2, leg),
+                end_feet_G(0, leg), end_feet_G(1, leg), end_feet_G(2, leg),
+                pos_feet_goal_G(0, leg), pos_feet_goal_G(1, leg), pos_feet_goal_G(2, leg),
+                vel_feet_goal_G(0, leg), vel_feet_goal_G(1, leg), vel_feet_goal_G(2, leg),
+                pos_feet_G(0, leg), pos_feet_G(1, leg), pos_feet_G(2, leg),
+                vel_feet_G(0, leg), vel_feet_G(1, leg), vel_feet_G(2, leg));
+
+            RCLCPP_INFO_THROTTLE(
+                ctrl_interfaces_.node->get_logger(),
+                *ctrl_interfaces_.node->get_clock(),
+                1000,
+                "[Trotting::swing-force] leg=%d goal_G=(%.3f %.3f %.3f) actual_G=(%.3f %.3f %.3f) "
+                "goal_v_G=(%.3f %.3f %.3f) actual_v_G=(%.3f %.3f %.3f) swing_force_P=(%.3f %.3f %.3f)",
+                leg,
+                pos_feet_goal_G(0, leg), pos_feet_goal_G(1, leg), pos_feet_goal_G(2, leg),
+                pos_feet_G(0, leg), pos_feet_G(1, leg), pos_feet_G(2, leg),
+                vel_feet_goal_G(0, leg), vel_feet_goal_G(1, leg), vel_feet_goal_G(2, leg),
+                vel_feet_G(0, leg), vel_feet_G(1, leg), vel_feet_G(2, leg),
+                force_feet_P(0, leg), force_feet_P(1, leg), force_feet_P(2, leg));
+            break;
+        }
+    }
+
     // 遍历4条腿，计算每条腿的关节力矩并赋值给控制接口
     for (int i = 0; i < 4; i++) {
         KDL::JntArray torque = robot_model_->getTorque(force_feet_B.col(i), i);  // 逆解
@@ -485,6 +553,7 @@ void StateTrotting::calcTau() {
 
         ctrl_interfaces_.debug_pub->publish(msg);
     }
+
 }
 
 /**
@@ -521,49 +590,15 @@ void StateTrotting::calcQQd() {
     const double hip_center = 0.0;    // 髋关节中心位置（0 rad）
     const double hip_min = hip_center - hip_q_range;
     const double hip_max = hip_center + hip_q_range;
-    const double thigh_min = -2.1;
-    const double thigh_max = 4.501;
-    const double calf_min = -2.818;
-    const double calf_max = -0.888;
-    const double thigh_qd_range = 6.0;
-    const double calf_qd_range = 8.0;
-
     // 关节限幅
     for (int leg_idx = 0; leg_idx < 4; ++leg_idx) 
     {
         const int hip_idx   = leg_idx * 3 + 0;
-        const int thigh_idx = leg_idx * 3 + 1;
-        const int calf_idx  = leg_idx * 3 + 2;
 
         // 髋关节位置限幅
         q_goal(hip_idx)  = saturation(q_goal(hip_idx),   Vec2(hip_min,   hip_max));
-        q_goal(thigh_idx) = saturation(q_goal(thigh_idx), Vec2(thigh_min, thigh_max));
-        q_goal(calf_idx)  = saturation(q_goal(calf_idx),  Vec2(calf_min,  calf_max));
         // 髋关节速度限制，防止突然抽动
         qd_goal(hip_idx) = saturation(qd_goal(hip_idx), Vec2(-hip_qd_range, hip_qd_range));
-        qd_goal(thigh_idx) = saturation(qd_goal(thigh_idx), Vec2(-thigh_qd_range, thigh_qd_range));
-        qd_goal(calf_idx) = saturation(qd_goal(calf_idx), Vec2(-calf_qd_range, calf_qd_range));
-
-        if (!std::isfinite(q_goal(hip_idx))) {
-            q_goal(hip_idx) = ctrl_interfaces_.joint_position_state_interface_[hip_idx].get().get_value();
-        }
-        if (!std::isfinite(q_goal(thigh_idx))) {
-            q_goal(thigh_idx) = ctrl_interfaces_.joint_position_state_interface_[thigh_idx].get().get_value();
-        }
-        if (!std::isfinite(q_goal(calf_idx))) {
-            q_goal(calf_idx) = ctrl_interfaces_.joint_position_state_interface_[calf_idx].get().get_value();
-        }
-
-        if (!std::isfinite(qd_goal(hip_idx))) {
-            qd_goal(hip_idx) = 0.0;
-        }
-        if (!std::isfinite(qd_goal(thigh_idx))) {
-            qd_goal(thigh_idx) = 0.0;
-        }
-        if (!std::isfinite(qd_goal(calf_idx))) {
-            qd_goal(calf_idx) = 0.0;
-        }
-
     }
 
     // 将关节目标位置和速度赋值给控制接口
@@ -572,6 +607,59 @@ void StateTrotting::calcQQd() {
         ctrl_interfaces_.joint_position_command_interface_[i].get().set_value(q_goal(i));
         ctrl_interfaces_.joint_velocity_command_interface_[i].get().set_value(qd_goal(i));
     }
+
+    for (int leg_idx = 0; leg_idx < 4; ++leg_idx) {
+        if (wave_generator_->contact_(leg_idx) == 1) {
+            const int hip_idx = leg_idx * 3 + 0;
+            const int thigh_idx = leg_idx * 3 + 1;
+            const int calf_idx = leg_idx * 3 + 2;
+            RCLCPP_INFO_THROTTLE(
+                ctrl_interfaces_.node->get_logger(),
+                *ctrl_interfaces_.node->get_clock(),
+                1000,
+                "[Trotting::joint-support] leg=%d | hip goal(q=%.3f dq=%.3f) state(q=%.3f dq=%.3f) | "
+                "thigh goal(q=%.3f dq=%.3f) state(q=%.3f dq=%.3f) | "
+                "calf goal(q=%.3f dq=%.3f) state(q=%.3f dq=%.3f)",
+                leg_idx,
+                q_goal(hip_idx), qd_goal(hip_idx),
+                ctrl_interfaces_.joint_position_state_interface_[hip_idx].get().get_value(),
+                ctrl_interfaces_.joint_velocity_state_interface_[hip_idx].get().get_value(),
+                q_goal(thigh_idx), qd_goal(thigh_idx),
+                ctrl_interfaces_.joint_position_state_interface_[thigh_idx].get().get_value(),
+                ctrl_interfaces_.joint_velocity_state_interface_[thigh_idx].get().get_value(),
+                q_goal(calf_idx), qd_goal(calf_idx),
+                ctrl_interfaces_.joint_position_state_interface_[calf_idx].get().get_value(),
+                ctrl_interfaces_.joint_velocity_state_interface_[calf_idx].get().get_value());
+            break;
+        }
+    }
+
+    for (int leg_idx = 0; leg_idx < 4; ++leg_idx) {
+        if (wave_generator_->contact_(leg_idx) == 0) {
+            const int hip_idx = leg_idx * 3 + 0;
+            const int thigh_idx = leg_idx * 3 + 1;
+            const int calf_idx = leg_idx * 3 + 2;
+            RCLCPP_INFO_THROTTLE(
+                ctrl_interfaces_.node->get_logger(),
+                *ctrl_interfaces_.node->get_clock(),
+                1000,
+                "[Trotting::joint-swing] leg=%d | hip goal(q=%.3f dq=%.3f) state(q=%.3f dq=%.3f) | "
+                "thigh goal(q=%.3f dq=%.3f) state(q=%.3f dq=%.3f) | "
+                "calf goal(q=%.3f dq=%.3f) state(q=%.3f dq=%.3f)",
+                leg_idx,
+                q_goal(hip_idx), qd_goal(hip_idx),
+                ctrl_interfaces_.joint_position_state_interface_[hip_idx].get().get_value(),
+                ctrl_interfaces_.joint_velocity_state_interface_[hip_idx].get().get_value(),
+                q_goal(thigh_idx), qd_goal(thigh_idx),
+                ctrl_interfaces_.joint_position_state_interface_[thigh_idx].get().get_value(),
+                ctrl_interfaces_.joint_velocity_state_interface_[thigh_idx].get().get_value(),
+                q_goal(calf_idx), qd_goal(calf_idx),
+                ctrl_interfaces_.joint_position_state_interface_[calf_idx].get().get_value(),
+                ctrl_interfaces_.joint_velocity_state_interface_[calf_idx].get().get_value());
+            break;
+        }
+    }
+
 }
 
 /**

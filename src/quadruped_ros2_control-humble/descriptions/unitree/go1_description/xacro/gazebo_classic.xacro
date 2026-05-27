@@ -113,7 +113,7 @@
 	<gazebo reference="trunk">
 		<mu1>0.6</mu1>
 		<mu2>0.6</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/Grey</material>
 	</gazebo>
 
@@ -145,24 +145,24 @@
 	<gazebo reference="FL_thigh">
 		<mu1>0.2</mu1>
 		<mu2>0.2</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/Grey</material>
-		<kp  value="100000.0"/>
-		<kd  value="10.0"/>
+		<kp  value="1000000.0"/>
+		<kd  value="1.0"/>
 	</gazebo>
 	<gazebo reference="FL_calf">
 		<mu1>0.2</mu1>
 		<mu2>0.2</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/DarkGrey</material>
 	</gazebo>
 	<gazebo reference="FL_foot">
 		<mu1>0.6</mu1>
 		<mu2>0.6</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/DarkGrey</material>
-		<kp  value="100000.0"/>
-		<kd  value="10.0"/>
+		<kp  value="1000000.0"/>
+		<kd  value="1.0"/>
 	</gazebo>
 
 	<!-- FR leg -->
@@ -174,24 +174,24 @@
 	<gazebo reference="FR_thigh">
 		<mu1>0.2</mu1>
 		<mu2>0.2</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/Grey</material>
-		<kp  value="100000.0"/>
-		<kd  value="10.0"/>
+		<kp  value="1000000.0"/>
+		<kd  value="1.0"/>
 	</gazebo>
 	<gazebo reference="FR_calf">
 		<mu1>0.2</mu1>
 		<mu2>0.2</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/DarkGrey</material>
 	</gazebo>
 	<gazebo reference="FR_foot">
 		<mu1>0.6</mu1>
 		<mu2>0.6</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/DarkGrey</material>
-		<kp  value="100000.0"/>
-		<kd  value="10.0"/>
+		<kp  value="1000000.0"/>
+		<kd  value="1.0"/>
 	</gazebo>
 
 	<!-- RL leg -->
@@ -203,24 +203,24 @@
 	<gazebo reference="RL_thigh">
 		<mu1>0.2</mu1>
 		<mu2>0.2</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/Grey</material>
-		<kp  value="100000.0"/>
-		<kd  value="10.0"/>
+		<kp  value="1000000.0"/>
+		<kd  value="1.0"/>
 	</gazebo>
 	<gazebo reference="RL_calf">
 		<mu1>0.2</mu1>
 		<mu2>0.2</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/DarkGrey</material>
 	</gazebo>
 	<gazebo reference="RL_foot">
 		<mu1>0.6</mu1>
 		<mu2>0.6</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/DarkGrey</material>
-		<kp  value="100000.0"/>
-		<kd  value="10.0"/>
+		<kp  value="1000000.0"/>
+		<kd  value="1.0"/>
 	</gazebo>
 
 	<!-- RR leg -->
@@ -232,23 +232,23 @@
 	<gazebo reference="RR_thigh">
 		<mu1>0.2</mu1>
 		<mu2>0.2</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/Grey</material>
-		<kp  value="100000.0"/>
-		<kd  value="10.0"/>
+		<kp  value="1000000.0"/>
+		<kd  value="1.0"/>
 	</gazebo>
 	<gazebo reference="RR_calf">
 		<mu1>0.2</mu1>
 		<mu2>0.2</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/DarkGrey</material>
 	</gazebo>
 	<gazebo reference="RR_foot">
 		<mu1>0.6</mu1>
 		<mu2>0.6</mu2>
-		<self_collide>0</self_collide>
+		<self_collide>1</self_collide>
 		<material>Gazebo/DarkGrey</material>
-		<kp  value="100000.0"/>
-		<kd  value="10.0"/>
+		<kp  value="1000000.0"/>
+		<kd  value="1.0"/>
 	</gazebo>
 </robot>

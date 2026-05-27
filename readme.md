@@ -165,6 +165,49 @@ Gazebo Classic运行时真正使用的是：
 * `fixed down / fixed stand` 基本已经正常
 * `trotting` 仍然存在目标轨迹、逆解和接触切换耦合导致的不稳定
 
+## 当前有效基线
+日期：
+* 2026.05.27
+
+分支与版本：
+* branch: `gazebo-trotting-debug`
+* commit: `8e2718f`
+
+当前已经验证更有效的一组组合：
+* `stand_pos_`：
+```cpp
+{0.0, 0.97, -1.67}
+```
+* `down_pos_`：
+```cpp
+{0.0, 1.25, -2.70}
+```
+* Gazebo 接触参数：
+  * 恢复原版 `gazebo_classic.xacro`
+  * `self_collide = 1`
+  * `foot/thigh kp = 1000000.0`
+  * `foot/thigh kd = 1.0`
+
+当前观测结论：
+* `fixed stand` 已明显优于之前的“持续大滑移”状态
+* `thigh/calf dq` 从原先约 `-1.87 / 3.10` 下降到了更小量级
+* `trotting` 已从早期发散状态进入“基本可控、可继续整定”的阶段
+
+推荐验证标准：
+* `fixed stand` 下：
+  * `|thigh dq|` 尽量小于 `0.2`
+  * `|calf dq|` 尽量小于 `0.3`
+* `trotting` 下：
+  * 连续运行 `30s`
+  * 不出现明显关节撞极限
+  * `support-force` 不出现持续异常飙升
+  * `joint-swing/joint-support` 的目标与实际不明显发散
+
+关键文件：
+* [UnitreeGuideController.h](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/controllers/unitree_guide_controller/include/unitree_guide_controller/UnitreeGuideController.h)
+* [gazebo_classic.xacro](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/descriptions/unitree/go1_description/xacro/gazebo_classic.xacro)
+* [StateTrotting.cpp](/home/xiangh9/xhros2/219_ws/src/quadruped_ros2_control-humble/controllers/unitree_guide_controller/src/FSM/StateTrotting.cpp)
+
 ## 建议的仿真启动方式
 ### 普通仿真
 ```

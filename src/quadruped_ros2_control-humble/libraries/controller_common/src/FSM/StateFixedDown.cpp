@@ -21,8 +21,8 @@ StateFixedDown::StateFixedDown(CtrlInterfaces& ctrl_interfaces,
         target_pos_[i] = target_pos[i];
     }
     // ========== 新增：初始化初始增益为0 ==========
-    kp_start_ = 200.0;
-    kd_start_ = 3.0;
+    kp_start_ = 0.0;
+    kd_start_ = 0.0;
 }
 
 void StateFixedDown::enter()
