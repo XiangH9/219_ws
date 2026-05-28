@@ -1,0 +1,16 @@
+pkill -9 gzserver
+pkill -9 gzclient
+pkill -9 -f gazebo
+pkill -9 -f spawn_entity.py
+pkill -9 -f robot_state_publisher
+pkill -9 -f controller_manager
+pkill -9 -f spawner
+pkill -9 -f "ros2 launch"
+
+colcon build --packages-select unitree_guide_controller --symlink-install
+
+source install/setup.bash
+
+ros2 launch unitree_guide_controller gazebo_classic.launch.py pkg_description:=go1_description
+
+ros2 launch unitree_guide_controller gazebo_classic.launch.py pkg_description:=go1_description debug:=true
