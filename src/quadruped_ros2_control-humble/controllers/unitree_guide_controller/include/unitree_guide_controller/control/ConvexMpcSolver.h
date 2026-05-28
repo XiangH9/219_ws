@@ -97,6 +97,7 @@ private:
   MatX Q_cost_;
   MatX R_cost_;
   MatX R_cost_rate_;
+  MatX S_cross_cost_;
   VecX r_cost_zero_;
   VecX r_cost_rate_;
 

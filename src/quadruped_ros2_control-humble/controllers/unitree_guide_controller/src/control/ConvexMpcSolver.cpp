@@ -19,6 +19,32 @@ extern "C" {
 
 #include <rclcpp/rclcpp.hpp>
 
+namespace {
+
+constexpr bool kEnableMpcStageLog = false;  // HPIPM内部阶段求解调试日志开关，建议false
+double kDummyScalar = 0.0;
+
+rclcpp::Logger& mpcLogger() {
+  static auto logger = rclcpp::get_logger("ConvexMpcSolver");
+  return logger;
+}
+
+rclcpp::Clock& mpcClock() {
+  static rclcpp::Clock clock(RCL_STEADY_TIME);
+  return clock;
+}
+
+void logFallbackReason(const char* reason) {
+  RCLCPP_WARN_THROTTLE(
+      mpcLogger(),
+      mpcClock(),
+      500,
+      "[ConvexMpcSolver] fallback reason: %s",
+      reason);
+}
+
+}  // namespace
+
 // 限制到 [0,1]
 // clamp = 夹紧/限幅。
 // clamp01(x) 表示把 x 限制到 0 到 1 之间。
@@ -295,17 +321,17 @@ struct ConvexMpcSolver::HpipmWorkspace {
   void applySettings() {
     d_ocp_qp_ipm_arg_set_default(hpipm_mode::SPEED, &arg);
 
-    int iter_max = 30;          // hpipm_iter_max = HPIPM 最大迭代次数
+    int iter_max = 100;          // hpipm_iter_max = HPIPM 最大迭代次数
     double alpha_min = 1e-12;   // hpipm_alpha_min = HPIPM 线搜索最小步长
     double mu0 = 1e1;           // hpipm_mu0 = 初始 barrier parameter，内点法初始障碍参数
 
-    double tol_stat = 1e-6;     // hpipm_tol_stat = stationarity tolerance，驻点残差容忍度
-    double tol_eq = 1e-6;       // hpipm_tol_eq = equality constraint tolerance，等式约束残差容忍度
-    double tol_ineq = 1e-6;     // hpipm_tol_ineq = inequality constraint tolerance，不等式约束残差容忍度
-    double tol_comp = 1e-6;     // hpipm_tol_comp = complementarity tolerance，互补条件残差容忍度
+    double tol_stat = 1e-4;     // hpipm_tol_stat = stationarity tolerance，驻点残差容忍度
+    double tol_eq = 1e-4;       // hpipm_tol_eq = equality constraint tolerance，等式约束残差容忍度
+    double tol_ineq = 1e-4;     // hpipm_tol_ineq = inequality constraint tolerance，不等式约束残差容忍度
+    double tol_comp = 1e-4;     // hpipm_tol_comp = complementarity tolerance，互补条件残差容忍度
 
     double reg_prim = 1e-10;    // hpipm_reg_prim = primal regularization，原始变量正则化，用于改善数值稳定性
-    int warm_start = 0;         // hpipm_warm_start = 是否启用 HPIPM 内部热启动，0 表示不启用
+    int warm_start = 1;         // hpipm_warm_start = 是否启用 HPIPM 内部热启动，0 表示不启用
     int pred_corr = 1;          // hpipm_pred_corr = predictor-corrector 开关，pred = predictor，预测步；corr = corrector，校正步，1 表示启用
     int ric_alg = 0;            // hpipm_ric_alg = Riccati algorithm，Riccati 递推算法类型，ric = Riccati，0 表示 square-root Riccati
 
@@ -333,15 +359,15 @@ ConvexMpcSolver::ConvexMpcSolver()
   // 状态顺序：
   // x = [Theta(3), p_com(3), omega(3), v_com(3), g_z(1)]
 
-  N = 25;                         // N = 最大预测步数，不是最终一定使用的预测步数，实际时域不能超过半个步态周期
+  N = 10;                         // N = 最大预测步数，先缩短 horizon 提高收敛率
   mass = 40.5;                    // 机器人质量，单位 kg
   Ib = Mat3::Identity();          // 机身的转动惯量矩阵，单位 kg*m^2，B 系表达
   pcb_B = Vec3::Zero();           // pcb_B 表示“从机身原点 body 到质心 COM 的偏移向量”，在 B 系下表达。COM = body + R * pcb_B
   g = Vec3(0.0, 0.0, -9.81);      // 重力加速度向量
 
-  mu = 0.4;                       // 摩擦系数
+  mu = 0.5;                       // 摩擦系数
   fzMin = 0.0;
-  fzMax = 350.0;
+  fzMax = 450.0;
 
   enforceHalfGaitHorizon = true;  // 论文：预测时域不能超过半个步态周期
 
@@ -353,21 +379,21 @@ ConvexMpcSolver::ConvexMpcSolver()
   Q.setZero();
   R.setZero();
   S.setZero();
-  Q.diagonal() << 200, 200, 20, // 3轴角度，姿态的权重
-                      50,  50,  200,// 3轴位置，机身位置的权重
-                      2,   2,   2,  // 3轴角速度，姿态变化的权重
-                      5,   5,   10, // 3轴速度，机身速度的权重
+  Q.diagonal() << 120, 120, 15, // 3轴角度，姿态的权重
+                      30,  30,  120,// 3轴位置，机身位置的权重
+                      1.5, 1.5, 1.0,  // 3轴角速度，姿态变化的权重
+                      4,   4,   8, // 3轴速度，机身速度的权重
                       0.0;          // 重力
 
-  R.diagonal() << 1, 1, 1,  // 力大小限制惩罚权重
-                      1, 1, 1,
-                      1, 1, 1,
-                      1, 1, 1;
+  R.diagonal() << 0.2, 0.2, 0.1,  // 力大小限制惩罚权重
+                      0.2, 0.2, 0.1,
+                      0.2, 0.2, 0.1,
+                      0.2, 0.2, 0.1;
 
-  S.diagonal() << 0.05, 0.05, 0.05, // 力变化平滑限制惩罚权重
-                      0.05, 0.05, 0.05,
-                      0.05, 0.05, 0.05,
-                      0.05, 0.05, 0.05;
+  S.diagonal() << 0.01, 0.01, 0.01, // 力变化平滑限制惩罚权重
+                      0.01, 0.01, 0.01,
+                      0.01, 0.01, 0.01,
+                      0.01, 0.01, 0.01;
 
   rebuildFixedMatrices();
 }
@@ -389,6 +415,10 @@ void ConvexMpcSolver::rebuildFixedMatrices() {
   R_cost_.noalias() = 2.0 * R;
   R_cost_.diagonal().array() += regularization;
 
+  // HPIPM 的 stage cost 里包含输入-状态交叉项 S。
+  // 当前论文实现没有这部分，因此这里显式传一个全零矩阵，
+  // 避免 d_ocp_qp_set_all 在 nx>0 && nu>0 的 stage 读到空指针。
+  S_cross_cost_ = MatX::Zero(nu_stage, nx_stage);
 
   // R：惩罚足底力本身太大
   // S：惩罚当前足底力相对上一帧变化太大
@@ -559,7 +589,24 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
     ng_stage   // 每步一般线性约束行数，4*7=28，包括 4 条腿，每条腿 7 行约束（摩擦锥 5 行 + 摆动腿强制 fx=0, fy=0 的 2 行）
   */
   // HPIPM 的求解器内存准备函数，设置基础参数并分配内存。
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][stage] solveMpc enter: N=%d dt=%.6f nx=%d nu=%d ng=%d",
+        horizon_N,
+        in.dt,
+        nx_stage,
+        nu_stage,
+        ng_stage);
+  }
+
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(mpcLogger(), "[ConvexMpcSolver][stage] before resizeIfNeeded");
+  }
   hpipm_->resizeIfNeeded(horizon_N, nx_stage, nu_stage, ng_stage);
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(mpcLogger(), "[ConvexMpcSolver][stage] after resizeIfNeeded");
+  }
 
   // ====== 线性离散 SRBD 模型 ======
   //
@@ -656,6 +703,7 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
   hpipm_->bb_stage[0] = hpipm_->A_stage[0] * in.x0; // 只有bb_stage[0] 是非零的
 
   // 赋值第0步单独写，因为 AA[0] 不作为优化变量不能传
+  hpipm_->AA[0] = &kDummyScalar;
   hpipm_->BB[0] = hpipm_->B_stage[0].data();
   hpipm_->bb[0] = hpipm_->bb_stage[0].data();
 
@@ -689,17 +737,24 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
     hpipm_->RR[0] = R_cost_.data();
     hpipm_->rr[0] = r_cost_zero_.data();
   }
+  hpipm_->QQ[0] = &kDummyScalar;
+  hpipm_->qq[0] = &kDummyScalar;
+  hpipm_->SS[0] = &kDummyScalar;
 
   for (int k = 1; k < horizon_N; ++k) {
     hpipm_->QQ[k] = Q_cost_.data();
     hpipm_->RR[k] = R_cost_.data();
+    hpipm_->SS[k] = S_cross_cost_.data();
     hpipm_->qq[k] = hpipm_->q_stage[k].data();
     hpipm_->rr[k] = r_cost_zero_.data();
   }
 
   // xN不是没用，而是用来评价：最后一步控制 u(N-1) 把系统推到了哪里
   hpipm_->QQ[horizon_N] = Q_cost_.data();
+  hpipm_->RR[horizon_N] = &kDummyScalar;
+  hpipm_->SS[horizon_N] = &kDummyScalar;
   hpipm_->qq[horizon_N] = hpipm_->q_stage[horizon_N].data();
+  hpipm_->rr[horizon_N] = &kDummyScalar;
 
   // CC/DD/llg/uug 是 HPIPM 对一般线性约束的命名习惯。
   //
@@ -711,48 +766,82 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
     // 第一句分类讨论的意义
     // 第 0 步：C0 连尺寸都不该是 28x13，因为 nx[0]=0
     // 第 1 步以后：Ck 尺寸是 28x13，但内容全是 0
-    hpipm_->CC[k] = (k == 0) ? nullptr : C_zero_constraint_.data(); // C没用到
+    hpipm_->CC[k] = (k == 0) ? &kDummyScalar : C_zero_constraint_.data(); // C没用到
     hpipm_->DD[k] = D_force_constraint_.data();
     hpipm_->llg[k] = hpipm_->lg_stage[k].data();
     hpipm_->uug[k] = hpipm_->ug_stage[k].data();
   }
+  hpipm_->CC[horizon_N] = &kDummyScalar;
+  hpipm_->DD[horizon_N] = &kDummyScalar;
+  hpipm_->llg[horizon_N] = &kDummyScalar;
+  hpipm_->uug[horizon_N] = &kDummyScalar;
 
   // unused box/slack constraints，不用管
-  int** hidxbx = nullptr;
-  double** hlbx = nullptr;
-  double** hubx = nullptr;
+  std::vector<int*> hidxbx(horizon_N + 1, nullptr);
+  std::vector<double*> hlbx(horizon_N + 1, nullptr);
+  std::vector<double*> hubx(horizon_N + 1, nullptr);
 
-  int** hidxbu = nullptr;
-  double** hlbu = nullptr;
-  double** hubu = nullptr;
+  std::vector<int*> hidxbu(horizon_N + 1, nullptr);
+  std::vector<double*> hlbu(horizon_N + 1, nullptr);
+  std::vector<double*> hubu(horizon_N + 1, nullptr);
 
-  double** hZl = nullptr;
-  double** hZu = nullptr;
-  double** hzl = nullptr;
-  double** hzu = nullptr;
+  std::vector<double*> hZl(horizon_N + 1, nullptr);
+  std::vector<double*> hZu(horizon_N + 1, nullptr);
+  std::vector<double*> hzl(horizon_N + 1, nullptr);
+  std::vector<double*> hzu(horizon_N + 1, nullptr);
 
-  int** hidxs = nullptr;
-  double** hlls = nullptr;
-  double** hlus = nullptr;
+  std::vector<int*> hidxs(horizon_N + 1, nullptr);
+  std::vector<double*> hlls(horizon_N + 1, nullptr);
+  std::vector<double*> hlus(horizon_N + 1, nullptr);
 
   // 不求解，只装填，d_ocp_qp_set_all函数把前面准备好的所有 MPC 数学数据，统一写进 HPIPM 的 QP 问题对象 hpipm_->qp 里
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][stage] before d_ocp_qp_set_all: bb0_norm=%.6f x0_norm=%.6f contact0=[%d %d %d %d]",
+        hpipm_->bb_stage[0].norm(),
+        in.x0.norm(),
+        in.contact[0][0],
+        in.contact[0][1],
+        in.contact[0][2],
+        in.contact[0][3]);
+  }
   d_ocp_qp_set_all(
       hpipm_->AA.data(), hpipm_->BB.data(), hpipm_->bb.data(),
       hpipm_->QQ.data(), hpipm_->SS.data(), hpipm_->RR.data(), hpipm_->qq.data(), hpipm_->rr.data(),
-      hidxbx, hlbx, hubx,
-      hidxbu, hlbu, hubu,
+      hidxbx.data(), hlbx.data(), hubx.data(),
+      hidxbu.data(), hlbu.data(), hubu.data(),
       hpipm_->CC.data(), hpipm_->DD.data(), hpipm_->llg.data(), hpipm_->uug.data(),
-      hZl, hZu, hzl, hzu,
-      hidxs, hlls, hlus,
+      hZl.data(), hZu.data(), hzl.data(), hzu.data(),
+      hidxs.data(), hlls.data(), hlus.data(),
       &hpipm_->qp
   );
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(mpcLogger(), "[ConvexMpcSolver][stage] after d_ocp_qp_set_all");
+  }
 
   // 求解 QP 问题，得到 hpipm_->qpSol 解
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(mpcLogger(), "[ConvexMpcSolver][stage] before d_ocp_qp_ipm_solve");
+  }
   d_ocp_qp_ipm_solve(&hpipm_->qp, &hpipm_->qpSol, &hpipm_->arg, &hpipm_->workspace);
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(mpcLogger(), "[ConvexMpcSolver][stage] after d_ocp_qp_ipm_solve");
+  }
 
   // 从 HPIPM 的 workspace 里读取求解状态，hpipm_status == 0表示求解成功，hpipm_status < 0 表示求解失败。
   int hpipm_status = -1;
   d_ocp_qp_ipm_get_status(&hpipm_->workspace, &hpipm_status);
+
+  if (kEnableMpcStageLog) {
+    int hpipm_iter = -1;
+    d_ocp_qp_ipm_get_iter(&hpipm_->workspace, &hpipm_iter);
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][stage] after status query: status=%d iter=%d",
+        hpipm_status,
+        hpipm_iter);
+  }
 
   if (hpipm_verbose) { // hpipm_verbose 默认是false
     int hpipm_iter = -1;
@@ -767,6 +856,18 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
   }
 
   if (hpipm_status != 0) {// 求解失败
+    int hpipm_iter = -1;
+    d_ocp_qp_ipm_get_iter(&hpipm_->workspace, &hpipm_iter);
+    RCLCPP_WARN_THROTTLE(
+        mpcLogger(),
+        mpcClock(),
+        500,
+        "[ConvexMpcSolver] MPC not converged, status=%d iter=%d N=%d dt=%.6f",
+        hpipm_status,
+        hpipm_iter,
+        horizon_N,
+        in.dt);
+
     if (enableFallbackToLast && has_last_solution_ && last_u0_.allFinite()) {// 如果可以返回上一帧就返回
       out.u0 = last_u0_;
       out.success = true;
@@ -782,6 +883,14 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
   out.success = out.u0.allFinite();
 
   if (out.success) {
+    if (!has_last_solution_) {
+      RCLCPP_INFO(
+          mpcLogger(),
+          "[ConvexMpcSolver] MPC first successful solve: u0_norm=%.6f N=%d dt=%.6f",
+          out.u0.norm(),
+          horizon_N,
+          in.dt);
+    }
     last_u0_ = out.u0;
     has_last_solution_ = true;
   }
@@ -805,15 +914,38 @@ Vec34 ConvexMpcSolver::solveFromDogWrench(
     const RotMat& Rd_GB,         // 期望机身姿态旋转矩阵，B 系到 G 系。用于生成参考姿态 theta_ref。
     const Vec3& v_ref_G          // 期望机身/质心线速度，G 系表达。用于生成参考速度和参考位置轨迹。
     ) {
+  Vec3 dd_pcd_clamped = dd_pcd_G;
+  dd_pcd_clamped(0) = saturation(dd_pcd_clamped(0), Vec2(-1.0, 1.0));
+  dd_pcd_clamped(1) = saturation(dd_pcd_clamped(1), Vec2(-1.0, 1.0));
+  dd_pcd_clamped(2) = saturation(dd_pcd_clamped(2), Vec2(-5.0, 5.0));
+
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO_THROTTLE(
+        mpcLogger(),
+        mpcClock(),
+        500,
+        "[ConvexMpcSolver][stage] solveFromDogWrench enter: dt=%.6f gait_period=%.6f stance_ratio=%.3f contact=[%d %d %d %d]",
+        control_dt,
+        gait_period,
+        stance_ratio,
+        contact_now(0),
+        contact_now(1),
+        contact_now(2),
+        contact_now(3));
+  }
+
   if (control_dt <= 0.0 || !std::isfinite(control_dt)) {  // 控制周期必须正数且有限
+    logFallbackReason("invalid control_dt");
     return makeFallbackForces(contact_now);
   }
 
   if (gait_period <= 0.0 || !std::isfinite(gait_period)) { // 步态周期必须正数且有限
+    logFallbackReason("invalid gait_period");
     return makeFallbackForces(contact_now);
   }
 
   if (stance_ratio <= 0.0 || stance_ratio >= 1.0 || !std::isfinite(stance_ratio)) {
+    logFallbackReason("invalid stance_ratio");
     return makeFallbackForces(contact_now);   // 支撑比必须在 (0,1) 之间且有限
   }
 
@@ -828,6 +960,7 @@ Vec34 ConvexMpcSolver::solveFromDogWrench(
       !Ib.allFinite() ||
       !pcb_B.allFinite() ||
       !g.allFinite()) {
+    logFallbackReason("invalid solver config");
     return makeFallbackForces(contact_now);
   }
 
@@ -841,11 +974,13 @@ Vec34 ConvexMpcSolver::solveFromDogWrench(
       !gyro_G.allFinite() ||
       !Rd_GB.allFinite() ||
       !v_ref_G.allFinite()) {
+    logFallbackReason("non-finite input");
     return makeFallbackForces(contact_now);
   }
 
   for (int leg = 0; leg < 4; ++leg) {
     if (contact_now(leg) != 0 && contact_now(leg) != 1) {
+      logFallbackReason("invalid contact_now");
       return makeFallbackForces(contact_now);
     }
   }
@@ -861,7 +996,19 @@ Vec34 ConvexMpcSolver::solveFromDogWrench(
   );
 
   if (in.N <= 0) {
+    logFallbackReason("effective horizon <= 0");
     return makeFallbackForces(contact_now);
+  }
+
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][stage] horizon ready: N=%d dt=%.6f dd_pcd=(%.3f %.3f %.3f)",
+        in.N,
+        in.dt,
+        dd_pcd_clamped(0),
+        dd_pcd_clamped(1),
+        dd_pcd_clamped(2));
   }
 
   // ====== x0 = [Theta, p_com, omega, v_com, g_z] ======
@@ -894,9 +1041,9 @@ Vec34 ConvexMpcSolver::solveFromDogWrench(
 
     // 参考位置轨迹：p_ref = p_now + v_ref*t + 0.5*a_ref*t^2
     in.xRef[k].segment<3>(3) <<
-        p_com_G(0) + v_ref_G(0) * t_k + 0.5 * dd_pcd_G(0) * t_k * t_k,
-        p_com_G(1) + v_ref_G(1) * t_k + 0.5 * dd_pcd_G(1) * t_k * t_k,
-        p_com_G(2) + v_ref_G(2) * t_k + 0.5 * dd_pcd_G(2) * t_k * t_k;
+        p_com_G(0) + v_ref_G(0) * t_k + 0.5 * dd_pcd_clamped(0) * t_k * t_k,
+        p_com_G(1) + v_ref_G(1) * t_k + 0.5 * dd_pcd_clamped(1) * t_k * t_k,
+        p_com_G(2) + v_ref_G(2) * t_k + 0.5 * dd_pcd_clamped(2) * t_k * t_k;
 
     in.xRef[k].segment<3>(6) << 0.0, 0.0, 0.0;
 
@@ -969,10 +1116,12 @@ Vec34 ConvexMpcSolver::solveFromDogWrench(
   if (ldlt.info() == Eigen::Success) {
     in.Iw_inv = ldlt.solve(Mat3::Identity()); // 求逆矩阵
   } else {
+    logFallbackReason("Iw LDLT failed");
     return makeFallbackForces(contact_now);
   }
 
   if (!in.Iw_inv.allFinite()) {
+    logFallbackReason("Iw_inv non-finite");
     return makeFallbackForces(contact_now);
   }
 
@@ -993,10 +1142,35 @@ Vec34 ConvexMpcSolver::solveFromDogWrench(
     in.rFeet[k] = rk;
   }
 
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][stage] input ready: x0=(roll=%.3f pitch=%.3f yaw=%.3f z=%.3f gz=%.3f) r0_leg0=(%.3f %.3f %.3f)",
+        in.x0(0),
+        in.x0(1),
+        in.x0(2),
+        in.x0(5),
+        in.x0(12),
+        in.rFeet[0][0](0),
+        in.rFeet[0][0](1),
+        in.rFeet[0][0](2));
+  }
+
   // ====== solve MPC ======
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(mpcLogger(), "[ConvexMpcSolver][stage] before solveMpc");
+  }
   const ConvexMpcOutput out = solveMpc(in);
+  if (kEnableMpcStageLog) {
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][stage] after solveMpc: success=%d u0_norm=%.6f",
+        out.success ? 1 : 0,
+        out.u0.norm());
+  }
 
   if (!out.success) {
+    logFallbackReason("solveMpc returned failure");
     return makeFallbackForces(contact_now);
   }
 
