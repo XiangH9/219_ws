@@ -23,7 +23,7 @@ BalanceCtrl::BalanceCtrl(const std::shared_ptr<QuadrupedRobot> &robot) {
             friction_ratio_, 0, 0, 1;
 
     // GO2 trunk COM / inertia from go2_description trunk inertial block.
-    pcb_ = Vec3(0.021112, 0.0, -0.005366);
+    pcb_ = Vec3(0.00, 0.0, -0.005366);
     Ib_ = Vec3(0.02448, 0.098077, 0.107).asDiagonal();
 
     // GO1 / previous tuned values for quick rollback:

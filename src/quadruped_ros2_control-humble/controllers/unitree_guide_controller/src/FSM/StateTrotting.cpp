@@ -30,7 +30,7 @@ StateTrotting::StateTrotting(CtrlInterfaces &ctrl_interfaces,
     gait_generator_(ctrl_component, this){
 
     troting_kalman = 2;                             //总模式开关【已弃用】
-    force_solver_mode_ = ForceSolverMode::MPC;       //总模式开关
+    force_solver_mode_ = ForceSolverMode::QP;       //总模式开关
 
     hip_q_range = 0.16;                               // 髋关节限制范围（±0.16 rad，约 ±9.2°）
     hip_qd_range = 1.0;                                // 髋关节速度限制（±1.0 rad/s）
@@ -39,10 +39,10 @@ StateTrotting::StateTrotting(CtrlInterfaces &ctrl_interfaces,
 
     Kp_motor_stance = 300;     // 支撑相电机位置增益
     Kd_motor_stance = 4.5;     // 支撑相电机速度增益
-    Kp_motor_swing = 220;       // 摆动相电机位置增益
+    Kp_motor_swing = 240;       // 摆动相电机位置增益
     Kd_motor_swing = 3.8;         // 摆动相电机速度增益
 
-    gait_height_ = 0.05;                            // 足底摆动高度
+    gait_height_ = 0.03;                            // 足底摆动高度
     // GO2 conservative outer-loop gains
     Kpp = Vec3(24, 24, 180.0).asDiagonal();         // 身体位置比例增益
     Kdp = Vec3(3.5, 3.5, 3.5).asDiagonal();         // 身体速度阻尼增益
@@ -60,8 +60,8 @@ StateTrotting::StateTrotting(CtrlInterfaces &ctrl_interfaces,
     // kp_roll_ = 450;
     // Kd_w_ = Vec3(4.1, 5.1, 3.1).asDiagonal();
 
-    Kp_swing_ = Vec3(0.3, 0.3, 0.3).asDiagonal();   // 摆动相位置增益
-    Kd_swing_ = Vec3(0.1, 0.1, 0.1).asDiagonal();   // 摆动相速度阻尼
+    Kp_swing_ = Vec3(0.8, 0.8, 0.8).asDiagonal();   // 摆动相位置增益
+    Kd_swing_ = Vec3(0.05, 0.05, 0.05).asDiagonal();   // 摆动相速度阻尼
 
     // QP/MPC优化相关参数
     if (force_solver_mode_ == ForceSolverMode::QP) 

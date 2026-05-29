@@ -364,11 +364,12 @@ ConvexMpcSolver::ConvexMpcSolver()
   // GO2 URDF-derived SRBD parameters.
   // total mass: sum of all link inertias in go2_description/urdf/robot.urdf
   mass = 15.098;
-  // trunk inertia / COM from go2_description trunk inertial block
+  // trunk inertia / COM from go2_description trunk inertial block.
+  // For trotting debug, shrink the forward COM offset to reduce nose-down bias.
   Ib << 0.02448,    0.00012166,  0.0014849,
         0.00012166, 0.098077,   -0.0000312,
         0.0014849, -0.0000312,   0.107;
-  pcb_B << 0.021112, 0.0, -0.005366;
+  pcb_B << 0.010000, 0.0, -0.005366;
 
   // GO1 / previous tuned values kept here for quick A/B rollback.
   // mass = 40.5;
@@ -376,6 +377,8 @@ ConvexMpcSolver::ConvexMpcSolver()
   //       0.000079993,  2.683,      -0.0000043683,
   //      -0.000069927, -0.0000043683,  2.934;
   // pcb_B << 0, 0, 0;
+  // GO2 raw URDF COM:
+  // pcb_B << 0.021112, 0.0, -0.005366;
   g = Vec3(0.0, 0.0, -9.81);      // 重力加速度向量
 
   mu = 0.4;                       // 摩擦系数
