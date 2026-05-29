@@ -42,6 +42,15 @@ void StateSwingTest::enter() {
     target_foot_pos_ = init_foot_pos_;
     fr_init_pos_ = init_foot_pos_[0];
     fr_goal_pos_ = fr_init_pos_;
+
+    RCLCPP_INFO(
+        ctrl_interfaces_.node->get_logger(),
+        "[SwingTest::enter] FR init_B=(%.3f %.3f %.3f) range_x=[%.3f, %.3f] range_y=[%.3f, %.3f] "
+        "range_z=[%.3f, %.3f] Kp=(%.1f %.1f %.1f) Kd=(%.1f %.1f %.1f)",
+        fr_init_pos_.p.x(), fr_init_pos_.p.y(), fr_init_pos_.p.z(),
+        _xMin, _xMax, _yMin, _yMax, _zMin, _zMax,
+        Kp.x(), Kp.y(), Kp.z(),
+        Kd.x(), Kd.y(), Kd.z());
 }
 
 void StateSwingTest::run(const rclcpp::Time &/*time*/, const rclcpp::Duration &/*period*/) {
@@ -69,6 +78,24 @@ void StateSwingTest::run(const rclcpp::Time &/*time*/, const rclcpp::Duration &/
 
     positionCtrl();
     torqueCtrl();
+
+    const KDL::Frame fr_current_pos = robot_model_->getFeet2BPositions(0);
+    const KDL::Vector fr_current_vel = robot_model_->getFeet2BVelocities(0);
+    const KDL::Vector pos_err = fr_goal_pos_.p - fr_current_pos.p;
+
+    RCLCPP_INFO_THROTTLE(
+        ctrl_interfaces_.node->get_logger(),
+        *ctrl_interfaces_.node->get_clock(),
+        100,
+        "[SwingTest::foot] cmd(lx=%.2f ly=%.2f ry=%.2f) goal_B=(%.3f %.3f %.3f) actual_B=(%.3f %.3f %.3f) "
+        "pos_err=(%.3f %.3f %.3f) vel_B=(%.3f %.3f %.3f)",
+        ctrl_interfaces_.control_inputs_.lx,
+        ctrl_interfaces_.control_inputs_.ly,
+        ctrl_interfaces_.control_inputs_.ry,
+        fr_goal_pos_.p.x(), fr_goal_pos_.p.y(), fr_goal_pos_.p.z(),
+        fr_current_pos.p.x(), fr_current_pos.p.y(), fr_current_pos.p.z(),
+        pos_err.x(), pos_err.y(), pos_err.z(),
+        fr_current_vel.x(), fr_current_vel.y(), fr_current_vel.z());
 }
 
 void StateSwingTest::exit() {
@@ -108,4 +135,18 @@ void StateSwingTest::torqueCtrl() const {
     for (int i = 0; i < 3; i++) {
         ctrl_interfaces_.joint_torque_command_interface_[i].get().set_value(torque0(i));
     }
+
+    const KDL::JntArray &q_now = robot_model_->current_joint_pos_[0];
+    const KDL::JntArray &q_goal = target_joint_pos_[0];
+
+    RCLCPP_INFO_THROTTLE(
+        ctrl_interfaces_.node->get_logger(),
+        *ctrl_interfaces_.node->get_clock(),
+        100,
+        "[SwingTest::joint] FR goal(q=%.3f %.3f %.3f) state(q=%.3f %.3f %.3f) "
+        "force_B=(%.3f %.3f %.3f) tau=(%.3f %.3f %.3f)",
+        q_goal(0), q_goal(1), q_goal(2),
+        q_now(0), q_now(1), q_now(2),
+        force0.x(), force0.y(), force0.z(),
+        torque0(0), torque0(1), torque0(2));
 }

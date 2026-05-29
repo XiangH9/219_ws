@@ -83,17 +83,17 @@ namespace unitree_guide_controller {
 
         // FR FL RR RL
         std::vector<double> stand_pos_ = {
-            0.0, 0.88, -1.55,
-            0.0, 0.88, -1.55,
-            0.0, 0.88, -1.55,
-            0.0, 0.88, -1.55
+            0.0, 0.82, -1.58,
+            0.0, 0.82, -1.58,
+            0.0, 0.82, -1.58,
+            0.0, 0.82, -1.58
         };
-        // Previous stand pose for rollback:
+        // GO2 averaged stand pose:
         // std::vector<double> stand_pos_ = {
-        //     0.0, 0.97, -1.67,
-        //     0.0, 0.97, -1.67,
-        //     0.0, 0.97, -1.67,
-        //     0.0, 0.97, -1.67
+        //     0.0100, 0.8494, -1.5963,
+        //     0.0100, 0.8494, -1.5963,
+        //     0.0100, 0.8494, -1.5963,
+        //     0.0100, 0.8494, -1.5963
         // };
 
         std::vector<double> down_pos_ = {

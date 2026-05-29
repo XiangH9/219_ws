@@ -10,10 +10,10 @@
 #include "quadProgpp/QuadProg++.hh"
 
 BalanceCtrl::BalanceCtrl(const std::shared_ptr<QuadrupedRobot> &robot) {
+    // GO1 tuned value for testing rollback.
+    mass_ = 40.5;
     // GO2 URDF-derived total mass (sum of link inertias in go2_description).
-    mass_ = 15.098;
-    // GO1 / previous tuned value for quick rollback:
-    // mass_ = 40.5;
+    // mass_ = 15.098;
 
     alpha_ = 0.001;
     beta_ = 0.001; //由0.1增大到0.2，越大运动越平滑，越小越激进
@@ -22,13 +22,13 @@ BalanceCtrl::BalanceCtrl(const std::shared_ptr<QuadrupedRobot> &robot) {
     friction_mat_ << 1, 0, friction_ratio_, -1, 0, friction_ratio_, 0, 1, friction_ratio_, 0, -1,
             friction_ratio_, 0, 0, 1;
 
-    // GO2 trunk COM / inertia from go2_description trunk inertial block.
-    pcb_ = Vec3(0.00, 0.0, -0.005366);
-    Ib_ = Vec3(0.02448, 0.098077, 0.107).asDiagonal();
+    // GO1 tuned COM / inertia for testing rollback.
+    pcb_ = Vec3(0.0, 0.0, 0.0);
+    Ib_ = Vec3(0.624, 2.683, 2.934).asDiagonal();
 
-    // GO1 / previous tuned values for quick rollback:
-    // pcb_ = Vec3(0.0, 0.0, 0.0);
-    // Ib_ = Vec3(0.624, 2.683, 2.934).asDiagonal();
+    // GO2 trunk COM / inertia from go2_description trunk inertial block.
+    // pcb_ = Vec3(0.0050, 0.0000, -0.0326);
+    // Ib_ = Vec3(0.02448, 0.098077, 0.107).asDiagonal();
 
     Vec6 s;
     Vec12 w, u;

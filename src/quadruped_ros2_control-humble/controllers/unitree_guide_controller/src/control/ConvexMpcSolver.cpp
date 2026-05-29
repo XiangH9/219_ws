@@ -361,22 +361,21 @@ ConvexMpcSolver::ConvexMpcSolver()
 
   N = 25;                         // N = 最大预测步数，先缩短 horizon 提高收敛率
 
+  // GO1 / previous tuned values for rollback testing.
+  mass = 40.5;
+  Ib << 0.624,       0.000079993,  -0.000069927,
+        0.000079993, 2.683,        -0.0000043683,
+       -0.000069927, -0.0000043683, 2.934;
+  pcb_B << 0.0, 0.0, 0.0;
+
   // GO2 URDF-derived SRBD parameters.
   // total mass: sum of all link inertias in go2_description/urdf/robot.urdf
-  mass = 15.098;
+  // mass = 15.098;
   // trunk inertia / COM from go2_description trunk inertial block.
-  // For trotting debug, shrink the forward COM offset to reduce nose-down bias.
-  Ib << 0.02448,    0.00012166,  0.0014849,
-        0.00012166, 0.098077,   -0.0000312,
-        0.0014849, -0.0000312,   0.107;
-  pcb_B << 0.010000, 0.0, -0.005366;
-
-  // GO1 / previous tuned values kept here for quick A/B rollback.
-  // mass = 40.5;
-  // Ib << 0.624,     0.000079993,  -0.000069927,
-  //       0.000079993,  2.683,      -0.0000043683,
-  //      -0.000069927, -0.0000043683,  2.934;
-  // pcb_B << 0, 0, 0;
+  // Ib << 0.02448,    0.00012166,  0.0014849,
+  //       0.00012166, 0.098077,   -0.0000312,
+  //       0.0014849, -0.0000312,   0.107;
+  // pcb_B << 0.010000, 0.0, -0.005366;
   // GO2 raw URDF COM:
   // pcb_B << 0.021112, 0.0, -0.005366;
   g = Vec3(0.0, 0.0, -9.81);      // 重力加速度向量
@@ -400,37 +399,37 @@ ConvexMpcSolver::ConvexMpcSolver()
   Q.setZero();
   R.setZero();
   S.setZero();
-  Q.diagonal() << 90, 90, 12,   // 3轴角度，姿态的权重
-                      24, 24, 180, // 3轴位置，机身位置的权重
-                      1.0, 1.0, 0.8,  // 3轴角速度，姿态变化的权重
-                      3,   3,   10,   // 3轴速度，机身速度的权重
-                      0.0;            // 重力
-  // Previous values for rollback:
-  // Q.diagonal() << 120, 120, 15,
-  //                     30,  30,  120,
-  //                     1.5, 1.5, 1.0,
-  //                     4,   4,   8,
+  Q.diagonal() << 120, 120, 15,  // GO1 姿态/位置权重
+                      30,  30,  120,
+                      1.5, 1.5, 1.0,
+                      4,   4,   8,
+                      0.0;
+  // GO2 conservative weights:
+  // Q.diagonal() << 90, 90, 12,
+  //                     24, 24, 180,
+  //                     1.0, 1.0, 0.8,
+  //                     3,   3,   10,
   //                     0.0;
 
-  R.diagonal() << 0.5, 0.5, 0.03,  // 力大小限制惩罚权重
-                      0.5, 0.5, 0.03,
-                      0.5, 0.5, 0.03,
-                      0.5, 0.5, 0.03;
-  // Previous values for rollback:
-  // R.diagonal() << 0.3, 0.3, 0.05,
-  //                     0.3, 0.3, 0.05,
-  //                     0.3, 0.3, 0.05,
-  //                     0.3, 0.3, 0.05;
+  R.diagonal() << 0.3, 0.3, 0.05,  // GO1 力大小惩罚
+                      0.3, 0.3, 0.05,
+                      0.3, 0.3, 0.05,
+                      0.3, 0.3, 0.05;
+  // GO2 conservative weights:
+  // R.diagonal() << 0.5, 0.5, 0.03,
+  //                     0.5, 0.5, 0.03,
+  //                     0.5, 0.5, 0.03,
+  //                     0.5, 0.5, 0.03;
 
-  S.diagonal() << 0.003, 0.003, 0.003, // 力变化平滑限制惩罚权重
-                      0.003, 0.003, 0.003,
-                      0.003, 0.003, 0.003,
-                      0.003, 0.003, 0.003;
-  // Previous values for rollback:
-  // S.diagonal() << 0.01, 0.01, 0.01,
-  //                     0.01, 0.01, 0.01,
-  //                     0.01, 0.01, 0.01,
-  //                     0.01, 0.01, 0.01;
+  S.diagonal() << 0.01, 0.01, 0.01,  // GO1 力变化平滑权重
+                      0.01, 0.01, 0.01,
+                      0.01, 0.01, 0.01,
+                      0.01, 0.01, 0.01;
+  // GO2 conservative weights:
+  // S.diagonal() << 0.003, 0.003, 0.003,
+  //                     0.003, 0.003, 0.003,
+  //                     0.003, 0.003, 0.003,
+  //                     0.003, 0.003, 0.003;
 
   rebuildFixedMatrices();
 }

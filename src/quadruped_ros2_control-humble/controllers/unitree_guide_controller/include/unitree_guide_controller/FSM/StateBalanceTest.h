@@ -45,6 +45,9 @@ private:
     double kp_w_;
     Mat3 Kp_p_, Kd_p_, Kd_w_;
     Vec3 dd_pcd_, d_wbd_;
+    Vec12 stable_joint_sum_;
+    int stable_sample_count_ = 0;
+    bool stable_reported_ = false;
 
     float _xMax, _xMin;
     float _yMax, _yMin;

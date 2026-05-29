@@ -42,23 +42,23 @@ StateTrotting::StateTrotting(CtrlInterfaces &ctrl_interfaces,
     Kp_motor_swing = 240;       // 摆动相电机位置增益
     Kd_motor_swing = 3.8;         // 摆动相电机速度增益
 
-    gait_height_ = 0.03;                            // 足底摆动高度
-    // GO2 conservative outer-loop gains
-    Kpp = Vec3(24, 24, 180.0).asDiagonal();         // 身体位置比例增益
-    Kdp = Vec3(3.5, 3.5, 3.5).asDiagonal();         // 身体速度阻尼增益
-    // Previous values for rollback:
-    // Kpp = Vec3(36, 36, 300.1).asDiagonal();
-    // Kdp = Vec3(5.2, 5.2, 5.0).asDiagonal();
+    gait_height_ = 0.07;                            // 足底摆动高度
+    // GO1 rollback gains for testing.
+    Kpp = Vec3(36, 36, 300.1).asDiagonal();         // 身体位置比例增益
+    Kdp = Vec3(5.2, 5.2, 5.0).asDiagonal();         // 身体速度阻尼增益
+    // GO2 conservative outer-loop gains:
+    // Kpp = Vec3(24, 24, 180.0).asDiagonal();
+    // Kdp = Vec3(3.5, 3.5, 3.5).asDiagonal();
 
     // roll/pitch/yaw 姿态比例增益
-    kp_pitch_ = 220;
-    kp_roll_ = 220;
+    kp_pitch_ = 450;
+    kp_roll_ = 450;
     kp_yaw_ = 16.2;
-    Kd_w_ = Vec3(2.5, 2.8, 2.2).asDiagonal();       // 姿态角速度阻尼增益
-    // Previous values for rollback:
-    // kp_pitch_ = 450;
-    // kp_roll_ = 450;
-    // Kd_w_ = Vec3(4.1, 5.1, 3.1).asDiagonal();
+    Kd_w_ = Vec3(4.1, 5.1, 3.1).asDiagonal();       // 姿态角速度阻尼增益
+    // GO2 conservative outer-loop gains:
+    // kp_pitch_ = 220;
+    // kp_roll_ = 220;
+    // Kd_w_ = Vec3(2.5, 2.8, 2.2).asDiagonal();
 
     Kp_swing_ = Vec3(0.8, 0.8, 0.8).asDiagonal();   // 摆动相位置增益
     Kd_swing_ = Vec3(0.05, 0.05, 0.05).asDiagonal();   // 摆动相速度阻尼
@@ -82,11 +82,11 @@ StateTrotting::StateTrotting(CtrlInterfaces &ctrl_interfaces,
     // 摆动腿闭环相关参数
     swing_force_limit = Vec3(5.0, 5.0, 10.0);       // 摆动腿期望足底力限制：x/y/z方向（N）
 
-    dd_pcb_saturation = Vec3(1.5, 1.5, 6.0);        // 身体最大期望加速度限制(m/s2)
-    d_wbd_saturation = Vec3(25.0, 25.0, 20.0);      // 身体最大期望角加速度限制(rad/s2)
-    // Previous values for rollback:
-    // dd_pcb_saturation = Vec3(3.2, 3.2, 10.5);
-    // d_wbd_saturation = Vec3(60.0, 70.0, 36.0);
+    dd_pcb_saturation = Vec3(3.2, 3.2, 10.5);       // 身体最大期望加速度限制(m/s2)
+    d_wbd_saturation = Vec3(60.0, 70.0, 36.0);      // 身体最大期望角加速度限制(rad/s2)
+    // GO2 conservative saturation:
+    // dd_pcb_saturation = Vec3(1.5, 1.5, 6.0);
+    // d_wbd_saturation = Vec3(25.0, 25.0, 20.0);
 
     v_x_limit_ << -0.2, 0.2;                        // 机身期望x速度限制
     v_y_limit_ << -0.1, 0.1;                        // 机身期望y速度限制
