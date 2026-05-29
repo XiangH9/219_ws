@@ -321,7 +321,7 @@ struct ConvexMpcSolver::HpipmWorkspace {
   void applySettings() {
     d_ocp_qp_ipm_arg_set_default(hpipm_mode::SPEED, &arg);
 
-    int iter_max = 100;          // hpipm_iter_max = HPIPM 最大迭代次数
+    int iter_max = 60;          // hpipm_iter_max = HPIPM 最大迭代次数
     double alpha_min = 1e-12;   // hpipm_alpha_min = HPIPM 线搜索最小步长
     double mu0 = 1e1;           // hpipm_mu0 = 初始 barrier parameter，内点法初始障碍参数
 
@@ -354,19 +354,37 @@ ConvexMpcSolver::ConvexMpcSolver()
     nu_stage(12),     // 每个输入维度：4 条腿的足底力，每条腿 3 维
     rows_per_leg(7),  // 每条腿的约束行数：摩擦锥 5 行 + 摆动腿强制 fx=0, fy=0 的 2 行
     ng_stage(28),     // 每步一般线性约束行数：4 条腿 * 每条腿 7 行约束
-    INF(1e19),        // 无穷大，用于约束上下界
+    INF(1e10),         // 有限大上界，避免约束尺度过大导致 HPIPM 数值病态
     hpipm_(new HpipmWorkspace()) {
   // 状态顺序：
   // x = [Theta(3), p_com(3), omega(3), v_com(3), g_z(1)]
 
-  N = 10;                         // N = 最大预测步数，先缩短 horizon 提高收敛率
-  mass = 40.5;                    // 机器人质量，单位 kg
-  Ib = Mat3::Identity();          // 机身的转动惯量矩阵，单位 kg*m^2，B 系表达
-  pcb_B = Vec3::Zero();           // pcb_B 表示“从机身原点 body 到质心 COM 的偏移向量”，在 B 系下表达。COM = body + R * pcb_B
+  N = 25;                         // N = 最大预测步数，先缩短 horizon 提高收敛率
+
+  // GO2 URDF-derived SRBD parameters.
+  // total mass: sum of all link inertias in go2_description/urdf/robot.urdf
+  mass = 15.098;
+  // trunk inertia / COM from go2_description trunk inertial block
+  Ib << 0.02448,    0.00012166,  0.0014849,
+        0.00012166, 0.098077,   -0.0000312,
+        0.0014849, -0.0000312,   0.107;
+  pcb_B << 0.021112, 0.0, -0.005366;
+
+  // GO1 / previous tuned values kept here for quick A/B rollback.
+  // mass = 40.5;
+  // Ib << 0.624,     0.000079993,  -0.000069927,
+  //       0.000079993,  2.683,      -0.0000043683,
+  //      -0.000069927, -0.0000043683,  2.934;
+  // pcb_B << 0, 0, 0;
   g = Vec3(0.0, 0.0, -9.81);      // 重力加速度向量
 
-  mu = 0.5;                       // 摩擦系数
-  fzMin = 0.0;
+  mu = 0.4;                       // 摩擦系数
+  // Dynamic stance lower bound now scales with stance count.
+  // This base value is kept as the minimum per-leg floor in 4-leg stance.
+  fzMin = 25.0;
+  // Previous fixed lower bound experiments kept for quick rollback:
+  // fzMin = 40.0;
+  // fzMin = 70.0;
   fzMax = 450.0;
 
   enforceHalfGaitHorizon = true;  // 论文：预测时域不能超过半个步态周期
@@ -379,21 +397,37 @@ ConvexMpcSolver::ConvexMpcSolver()
   Q.setZero();
   R.setZero();
   S.setZero();
-  Q.diagonal() << 120, 120, 15, // 3轴角度，姿态的权重
-                      30,  30,  120,// 3轴位置，机身位置的权重
-                      1.5, 1.5, 1.0,  // 3轴角速度，姿态变化的权重
-                      4,   4,   8, // 3轴速度，机身速度的权重
-                      0.0;          // 重力
+  Q.diagonal() << 90, 90, 12,   // 3轴角度，姿态的权重
+                      24, 24, 180, // 3轴位置，机身位置的权重
+                      1.0, 1.0, 0.8,  // 3轴角速度，姿态变化的权重
+                      3,   3,   10,   // 3轴速度，机身速度的权重
+                      0.0;            // 重力
+  // Previous values for rollback:
+  // Q.diagonal() << 120, 120, 15,
+  //                     30,  30,  120,
+  //                     1.5, 1.5, 1.0,
+  //                     4,   4,   8,
+  //                     0.0;
 
-  R.diagonal() << 0.2, 0.2, 0.1,  // 力大小限制惩罚权重
-                      0.2, 0.2, 0.1,
-                      0.2, 0.2, 0.1,
-                      0.2, 0.2, 0.1;
+  R.diagonal() << 0.5, 0.5, 0.03,  // 力大小限制惩罚权重
+                      0.5, 0.5, 0.03,
+                      0.5, 0.5, 0.03,
+                      0.5, 0.5, 0.03;
+  // Previous values for rollback:
+  // R.diagonal() << 0.3, 0.3, 0.05,
+  //                     0.3, 0.3, 0.05,
+  //                     0.3, 0.3, 0.05,
+  //                     0.3, 0.3, 0.05;
 
-  S.diagonal() << 0.01, 0.01, 0.01, // 力变化平滑限制惩罚权重
-                      0.01, 0.01, 0.01,
-                      0.01, 0.01, 0.01,
-                      0.01, 0.01, 0.01;
+  S.diagonal() << 0.003, 0.003, 0.003, // 力变化平滑限制惩罚权重
+                      0.003, 0.003, 0.003,
+                      0.003, 0.003, 0.003,
+                      0.003, 0.003, 0.003;
+  // Previous values for rollback:
+  // S.diagonal() << 0.01, 0.01, 0.01,
+  //                     0.01, 0.01, 0.01,
+  //                     0.01, 0.01, 0.01,
+  //                     0.01, 0.01, 0.01;
 
   rebuildFixedMatrices();
 }
@@ -519,6 +553,19 @@ void ConvexMpcSolver::rebuildFixedMatrices() {
 void ConvexMpcSolver::reset() {
   last_u0_.setZero();
   has_last_solution_ = false;
+  has_logged_first_trot_mpc_snapshot_ = false;
+  has_logged_first_qp_structure_snapshot_ = false;
+}
+
+double ConvexMpcSolver::computeStanceLegFzMin(int stance_count) const {
+  const int effective_stance_count = std::max(1, stance_count);
+  const double nominal_per_leg =
+      mass * std::abs(g(2)) / static_cast<double>(effective_stance_count);
+
+  // Only use this in the constraint, not in the objective:
+  // keep enough normal force margin for the current support pattern.
+  const double scaled_min = 1.0 * nominal_per_leg;
+  return std::min(fzMax, std::max(fzMin, scaled_min));
 }
 
 // MPC 求解失败/输入非法时的保底力分配函数
@@ -534,12 +581,8 @@ Vec34 ConvexMpcSolver::makeFallbackForces(const VecInt4& contact_now) const {
   }
 
   const bool no_stance = (stance_count == 0);
-  const int effective_stance_count = no_stance ? 4 : stance_count;  // 如果没有任何支撑腿，就假设四条腿都在支撑，以平均分配力。
-
-  const double fz_nominal =
-      mass * std::abs(g(2)) / static_cast<double>(effective_stance_count);
-
-  const double fz = std::min(fzMax, std::max(fzMin, fz_nominal));
+  const int effective_stance_count = no_stance ? 4 : stance_count;
+  const double fz = computeStanceLegFzMin(effective_stance_count);
 
   static rclcpp::Clock steady_clock(RCL_STEADY_TIME);
   RCLCPP_WARN_THROTTLE(
@@ -671,6 +714,15 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
 
   // 设置摩擦锥的上下界矩阵ci
   for (int k = 0; k < horizon_N; ++k) {
+    int stance_count = 0;
+    for (int leg = 0; leg < 4; ++leg) {
+      if (in.contact[k][leg] == 1) {
+        ++stance_count;
+      }
+    }
+    VecX lower_bound_stance_dynamic = lower_bound_stance_;
+    lower_bound_stance_dynamic(4) = computeStanceLegFzMin(stance_count);
+
     for (int leg = 0; leg < 4; ++leg) {
       const int row = rows_per_leg * leg;
 
@@ -680,7 +732,7 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
         hpipm_->ug_stage[k].segment(row, rows_per_leg) = upper_bound_swing_;
       } else {
         // stance
-        hpipm_->lg_stage[k].segment(row, rows_per_leg) = lower_bound_stance_;
+        hpipm_->lg_stage[k].segment(row, rows_per_leg) = lower_bound_stance_dynamic;
         hpipm_->ug_stage[k].segment(row, rows_per_leg) = upper_bound_stance_;
       }
     }
@@ -730,7 +782,7 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
   // 当前在论文目标基础上，对真正会执行的 u0 额外加入：
   // (u0 - last_u0)^T S (u0 - last_u0)，其中这个权重系数S代码中是S，不是HPIPM里的状态交叉项SS，完全不同的
   if (has_last_solution_ && !S.isZero(0)) {
-    r_cost_rate_.noalias() = -2.0 * S * last_u0_; // 这里是计算之后的中间过程项
+    r_cost_rate_.noalias() = -2.0 * S * last_u0_;
     hpipm_->RR[0] = R_cost_rate_.data();
     hpipm_->rr[0] = r_cost_rate_.data();
   } else {
@@ -775,6 +827,68 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
   hpipm_->DD[horizon_N] = &kDummyScalar;
   hpipm_->llg[horizon_N] = &kDummyScalar;
   hpipm_->uug[horizon_N] = &kDummyScalar;
+
+  if (!has_logged_first_qp_structure_snapshot_) {
+    const auto q_diag = Q_cost_.diagonal();
+    const auto r_diag = R_cost_.diagonal();
+    const auto rr0_diag =
+        (has_last_solution_ && !S.isZero(0))
+            ? R_cost_rate_.diagonal()
+            : R_cost_.diagonal();
+
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][qp] cost diag Q=(%.3f %.3f %.3f | %.3f %.3f %.3f | %.3f %.3f %.3f | %.3f %.3f %.3f | %.3f) "
+        "R0=(%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f) "
+        "RR0=(%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f)",
+        q_diag(0), q_diag(1), q_diag(2),
+        q_diag(3), q_diag(4), q_diag(5),
+        q_diag(6), q_diag(7), q_diag(8),
+        q_diag(9), q_diag(10), q_diag(11),
+        q_diag(12),
+        r_diag(0), r_diag(1), r_diag(2), r_diag(3), r_diag(4), r_diag(5),
+        r_diag(6), r_diag(7), r_diag(8), r_diag(9), r_diag(10), r_diag(11),
+        rr0_diag(0), rr0_diag(1), rr0_diag(2), rr0_diag(3), rr0_diag(4), rr0_diag(5),
+        rr0_diag(6), rr0_diag(7), rr0_diag(8), rr0_diag(9), rr0_diag(10), rr0_diag(11));
+
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][qp] dynamics norm A0=%.6f B0=%.6f bb0=%.6f q1=%.6f qN=%.6f D=%.6f C=%.6f x0=%.6f",
+        hpipm_->A_stage[0].norm(),
+        hpipm_->B_stage[0].norm(),
+        hpipm_->bb_stage[0].norm(),
+        (horizon_N > 1) ? hpipm_->q_stage[1].norm() : 0.0,
+        hpipm_->q_stage[horizon_N].norm(),
+        D_force_constraint_.norm(),
+        C_zero_constraint_.norm(),
+        in.x0.norm());
+
+    for (int leg = 0; leg < 4; ++leg) {
+      const int row = rows_per_leg * leg;
+      const auto lg = hpipm_->lg_stage[0].segment(row, rows_per_leg);
+      const auto ug = hpipm_->ug_stage[0].segment(row, rows_per_leg);
+      const double b_ang_norm = hpipm_->B_stage[0].block<3,3>(6, 3 * leg).norm();
+      const double b_lin_norm = hpipm_->B_stage[0].block<3,3>(9, 3 * leg).norm();
+
+      RCLCPP_INFO(
+          mpcLogger(),
+          "[ConvexMpcSolver][qp] k=0 leg=%d contact=%d r=(%.3f %.3f %.3f) "
+          "B_ang_norm=%.6f B_lin_norm=%.6f "
+          "lg=(%.3f %.3f %.3f %.3f %.3f %.3f %.3f) "
+          "ug=(%.3f %.3f %.3f %.3f %.3f %.3f %.3f)",
+          leg,
+          in.contact[0][leg],
+          in.rFeet[0][leg](0),
+          in.rFeet[0][leg](1),
+          in.rFeet[0][leg](2),
+          b_ang_norm,
+          b_lin_norm,
+          lg(0), lg(1), lg(2), lg(3), lg(4), lg(5), lg(6),
+          ug(0), ug(1), ug(2), ug(3), ug(4), ug(5), ug(6));
+    }
+
+    has_logged_first_qp_structure_snapshot_ = true;
+  }
 
   // unused box/slack constraints，不用管
   std::vector<int*> hidxbx(horizon_N + 1, nullptr);
@@ -883,6 +997,13 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
   out.success = out.u0.allFinite();
 
   if (out.success) {
+    static rclcpp::Clock steady_clock(RCL_STEADY_TIME);
+    const double fz_fr = out.u0(2);
+    const double fz_fl = out.u0(5);
+    const double fz_rr = out.u0(8);
+    const double fz_rl = out.u0(11);
+    const double sum_fz = fz_fr + fz_fl + fz_rr + fz_rl;
+
     if (!has_last_solution_) {
       RCLCPP_INFO(
           mpcLogger(),
@@ -891,6 +1012,17 @@ ConvexMpcOutput ConvexMpcSolver::solveMpc(const ConvexMpcInput& in) {
           horizon_N,
           in.dt);
     }
+    RCLCPP_INFO_THROTTLE(
+        mpcLogger(),
+        steady_clock,
+        250,
+        "[ConvexMpcSolver] MPC u0 fz=(%.3f %.3f %.3f %.3f) sum_fz=%.3f u0_norm=%.6f",
+        fz_fr,
+        fz_fl,
+        fz_rr,
+        fz_rl,
+        sum_fz,
+        out.u0.norm());
     last_u0_ = out.u0;
     has_last_solution_ = true;
   }
@@ -1140,6 +1272,51 @@ Vec34 ConvexMpcSolver::solveFromDogWrench(
     }
 
     in.rFeet[k] = rk;
+  }
+
+  if (!has_logged_first_trot_mpc_snapshot_) {
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][inspect] x0: theta=(%.3f %.3f %.3f) p=(%.3f %.3f %.3f) omega=(%.3f %.3f %.3f) v=(%.3f %.3f %.3f) gz=%.3f",
+        in.x0(0), in.x0(1), in.x0(2),
+        in.x0(3), in.x0(4), in.x0(5),
+        in.x0(6), in.x0(7), in.x0(8),
+        in.x0(9), in.x0(10), in.x0(11),
+        in.x0(12));
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][inspect] xRef0: theta=(%.3f %.3f %.3f) p=(%.3f %.3f %.3f) omega=(%.3f %.3f %.3f) v=(%.3f %.3f %.3f) gz=%.3f",
+        in.xRef[0](0), in.xRef[0](1), in.xRef[0](2),
+        in.xRef[0](3), in.xRef[0](4), in.xRef[0](5),
+        in.xRef[0](6), in.xRef[0](7), in.xRef[0](8),
+        in.xRef[0](9), in.xRef[0](10), in.xRef[0](11),
+        in.xRef[0](12));
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][inspect] xRef1: theta=(%.3f %.3f %.3f) p=(%.3f %.3f %.3f) omega=(%.3f %.3f %.3f) v=(%.3f %.3f %.3f) gz=%.3f",
+        in.xRef[1](0), in.xRef[1](1), in.xRef[1](2),
+        in.xRef[1](3), in.xRef[1](4), in.xRef[1](5),
+        in.xRef[1](6), in.xRef[1](7), in.xRef[1](8),
+        in.xRef[1](9), in.xRef[1](10), in.xRef[1](11),
+        in.xRef[1](12));
+    RCLCPP_INFO(
+        mpcLogger(),
+        "[ConvexMpcSolver][inspect] Ib diag=(%.3f %.3f %.3f) Iw diag=(%.3f %.3f %.3f) Iw_inv diag=(%.3f %.3f %.3f)",
+        Ib(0, 0), Ib(1, 1), Ib(2, 2),
+        Iw(0, 0), Iw(1, 1), Iw(2, 2),
+        in.Iw_inv(0, 0), in.Iw_inv(1, 1), in.Iw_inv(2, 2));
+    for (int leg = 0; leg < 4; ++leg) {
+      RCLCPP_INFO(
+          mpcLogger(),
+          "[ConvexMpcSolver][inspect] k=0 leg=%d contact_now=%d contact_pred=%d rFeet=(%.3f %.3f %.3f)",
+          leg,
+          contact_now(leg),
+          in.contact[0][leg],
+          in.rFeet[0][leg](0),
+          in.rFeet[0][leg](1),
+          in.rFeet[0][leg](2));
+    }
+    has_logged_first_trot_mpc_snapshot_ = true;
   }
 
   if (kEnableMpcStageLog) {

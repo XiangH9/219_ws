@@ -91,6 +91,8 @@ private:
   // last_u0_ 现在用于 HPIPM 失败时 fallback，也用于输入变化率项的上一帧输入。
   Vec12 last_u0_ = Vec12::Zero();
   bool has_last_solution_ = false;
+  bool has_logged_first_trot_mpc_snapshot_ = false;
+  bool has_logged_first_qp_structure_snapshot_ = false;
 
   std::unique_ptr<HpipmWorkspace> hpipm_;
 
@@ -109,5 +111,6 @@ private:
   VecX lower_bound_swing_;
   VecX upper_bound_swing_;
 
+  double computeStanceLegFzMin(int stance_count) const;
   Vec34 makeFallbackForces(const VecInt4& contact_now) const;
 };

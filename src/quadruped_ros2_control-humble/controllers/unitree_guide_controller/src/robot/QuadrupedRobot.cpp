@@ -34,9 +34,15 @@ QuadrupedRobot::QuadrupedRobot(CtrlInterfaces &ctrl_interfaces, const std::strin
     for (const auto &[fst, snd]: robot_tree.getSegments()) {
         mass_ += snd.segment.getInertia().getMass();
     }
-    // 下面数据不可用！下面是宇树go2的参数！因为是足底位置！
-    feet_pos_normal_stand_ << 0.1881, 0.1881, -0.1881, -0.1881, -0.1300, 0.1300, 
-            -0.1300, 0.1300, -0.3200, -0.3200, -0.3200, -0.3200;  // 此处证明X 轴正方向：向前。
+    // GO2 nominal stand foot positions in body frame used as an initialization hint.
+    // This is a geometry-aligned estimate, not a strict IK target.
+    feet_pos_normal_stand_ << 0.1934,  0.1934, -0.1934, -0.1934,
+                              -0.1420, 0.1420, -0.1420,  0.1420,
+                              -0.3000, -0.3000, -0.3000, -0.3000;
+    // Previous values for rollback:
+    // feet_pos_normal_stand_ << 0.1881, 0.1881, -0.1881, -0.1881,
+    //                           -0.1300, 0.1300, -0.1300, 0.1300,
+    //                           -0.3200, -0.3200, -0.3200, -0.3200;
 }
 
 std::vector<KDL::JntArray> QuadrupedRobot::getQ(const std::vector<KDL::Frame> &pEe_list) const {

@@ -34,21 +34,31 @@ StateTrotting::StateTrotting(CtrlInterfaces &ctrl_interfaces,
 
     hip_q_range = 0.16;                               // 髋关节限制范围（±0.16 rad，约 ±9.2°）
     hip_qd_range = 1.0;                                // 髋关节速度限制（±1.0 rad/s）
+    thigh_qd_range = 3.0;                              // 大腿关节速度限制（±3.0 rad/s）
+    calf_qd_range = 4.0;                               // 小腿关节速度限制（±4.0 rad/s）
 
     Kp_motor_stance = 300;     // 支撑相电机位置增益
     Kd_motor_stance = 4.5;     // 支撑相电机速度增益
     Kp_motor_swing = 220;       // 摆动相电机位置增益
     Kd_motor_swing = 3.8;         // 摆动相电机速度增益
 
-    gait_height_ = 0.07;                            // 足底摆动高度
-    Kpp = Vec3(36, 36, 300.1).asDiagonal();         // 身体位置比例增益
-    Kdp = Vec3(5.2, 5.2, 5.0).asDiagonal();         // 身体速度阻尼增益
+    gait_height_ = 0.05;                            // 足底摆动高度
+    // GO2 conservative outer-loop gains
+    Kpp = Vec3(24, 24, 180.0).asDiagonal();         // 身体位置比例增益
+    Kdp = Vec3(3.5, 3.5, 3.5).asDiagonal();         // 身体速度阻尼增益
+    // Previous values for rollback:
+    // Kpp = Vec3(36, 36, 300.1).asDiagonal();
+    // Kdp = Vec3(5.2, 5.2, 5.0).asDiagonal();
 
     // roll/pitch/yaw 姿态比例增益
-    kp_pitch_ = 450;
-    kp_roll_ = 450;
+    kp_pitch_ = 220;
+    kp_roll_ = 220;
     kp_yaw_ = 16.2;
-    Kd_w_ = Vec3(4.1, 5.1, 3.1).asDiagonal();       // 姿态角速度阻尼增益
+    Kd_w_ = Vec3(2.5, 2.8, 2.2).asDiagonal();       // 姿态角速度阻尼增益
+    // Previous values for rollback:
+    // kp_pitch_ = 450;
+    // kp_roll_ = 450;
+    // Kd_w_ = Vec3(4.1, 5.1, 3.1).asDiagonal();
 
     Kp_swing_ = Vec3(0.3, 0.3, 0.3).asDiagonal();   // 摆动相位置增益
     Kd_swing_ = Vec3(0.1, 0.1, 0.1).asDiagonal();   // 摆动相速度阻尼
@@ -63,17 +73,20 @@ StateTrotting::StateTrotting(CtrlInterfaces &ctrl_interfaces,
     }
     else if (force_solver_mode_ == ForceSolverMode::MPC)
     {
-        tau_ff_scale = 0.60;                             // MPC力分配衰减系数
+        tau_ff_scale = 1.0;                             // MPC力分配衰减系数
         tau_ff_limit_hip = 34.0;                         // MPC力分配前馈力矩限制：髋关节
-        tau_ff_limit_thigh = 60.0;                       // MPC力分配前馈力矩限制：大腿关节
+        tau_ff_limit_thigh = 80.0;                       // MPC力分配前馈力矩限制：大腿关节
         tau_ff_limit_calf = 80.0;                        // MPC力分配前馈力矩限制：小腿关节
     }
 
     // 摆动腿闭环相关参数
     swing_force_limit = Vec3(5.0, 5.0, 10.0);       // 摆动腿期望足底力限制：x/y/z方向（N）
 
-    dd_pcb_saturation = Vec3(3.2, 3.2, 10.5);       // 身体最大期望加速度限制(m/s2)
-    d_wbd_saturation = Vec3(60.0, 70.0, 36.0);      // 身体最大期望角加速度限制(rad/s2)
+    dd_pcb_saturation = Vec3(1.5, 1.5, 6.0);        // 身体最大期望加速度限制(m/s2)
+    d_wbd_saturation = Vec3(25.0, 25.0, 20.0);      // 身体最大期望角加速度限制(rad/s2)
+    // Previous values for rollback:
+    // dd_pcb_saturation = Vec3(3.2, 3.2, 10.5);
+    // d_wbd_saturation = Vec3(60.0, 70.0, 36.0);
 
     v_x_limit_ << -0.2, 0.2;                        // 机身期望x速度限制
     v_y_limit_ << -0.1, 0.1;                        // 机身期望y速度限制
@@ -97,7 +110,7 @@ void StateTrotting::enter() {
     v_cmd_body_.setZero();                              // 机身期望速度初始化
     yaw_cmd_ = estimator_->getYaw();                    // 机身期望yaw角初始化
     const double roll_des = 0.0;                        // 机身期望roll角初始化
-    const double pitch_des = 0.05;                      // 机身期望pitch角初始化
+    const double pitch_des = 0.0;                       // 先去掉前后腿负载偏置，便于验证MPC受力
     Rd = rotz(yaw_cmd_) * roty(pitch_des) * rotx(roll_des);
     w_cmd_global_.setZero();                            //机身期望角速度初始化
        
@@ -109,6 +122,7 @@ void StateTrotting::enter() {
     mpc_foot_hold_G_.setZero();
     mpc_contact_last_.setZero();
     mpc_foot_hold_initialized_ = false;
+    has_logged_stance_all_kinematics_snapshot_ = false;
 }
 
 /**
@@ -586,6 +600,33 @@ void StateTrotting::calcQQd() {
     }
     qd_goal = robot_model_->getQd(pos_feet_target_frame, vel_feet_target_B);
 
+    if (!has_logged_stance_all_kinematics_snapshot_ &&
+        wave_generator_->status_ == WaveStatus::STANCE_ALL) {
+        RCLCPP_INFO(
+            ctrl_interfaces_.node->get_logger(),
+            "[Trotting::kin] body pos=(%.3f %.3f %.3f) pcd=(%.3f %.3f %.3f) yaw_cmd=%.3f",
+            pos_body_(0), pos_body_(1), pos_body_(2),
+            pcd_(0), pcd_(1), pcd_(2),
+            yaw_cmd_);
+
+        for (int leg = 0; leg < 4; ++leg) {
+            const int hip_idx = leg * 3 + 0;
+            const int thigh_idx = leg * 3 + 1;
+            const int calf_idx = leg * 3 + 2;
+            RCLCPP_INFO(
+                ctrl_interfaces_.node->get_logger(),
+                "[Trotting::kin] leg=%d goal_G=(%.3f %.3f %.3f) target_B=(%.3f %.3f %.3f) "
+                "q_goal=(%.3f %.3f %.3f) qd_goal=(%.3f %.3f %.3f)",
+                leg,
+                pos_feet_goal_G(0, leg), pos_feet_goal_G(1, leg), pos_feet_goal_G(2, leg),
+                pos_feet_target_B(0, leg), pos_feet_target_B(1, leg), pos_feet_target_B(2, leg),
+                q_goal(hip_idx), q_goal(thigh_idx), q_goal(calf_idx),
+                qd_goal(hip_idx), qd_goal(thigh_idx), qd_goal(calf_idx));
+        }
+
+        has_logged_stance_all_kinematics_snapshot_ = true;
+    }
+
     // hip小范围限制
     const double hip_center = 0.0;    // 髋关节中心位置（0 rad）
     const double hip_min = hip_center - hip_q_range;
@@ -594,11 +635,15 @@ void StateTrotting::calcQQd() {
     for (int leg_idx = 0; leg_idx < 4; ++leg_idx) 
     {
         const int hip_idx   = leg_idx * 3 + 0;
+        const int thigh_idx = leg_idx * 3 + 1;
+        const int calf_idx  = leg_idx * 3 + 2;
 
         // 髋关节位置限幅
         q_goal(hip_idx)  = saturation(q_goal(hip_idx),   Vec2(hip_min,   hip_max));
         // 髋关节速度限制，防止突然抽动
         qd_goal(hip_idx) = saturation(qd_goal(hip_idx), Vec2(-hip_qd_range, hip_qd_range));
+        qd_goal(thigh_idx) = saturation(qd_goal(thigh_idx), Vec2(-thigh_qd_range, thigh_qd_range));
+        qd_goal(calf_idx) = saturation(qd_goal(calf_idx), Vec2(-calf_qd_range, calf_qd_range));
     }
 
     // 将关节目标位置和速度赋值给控制接口

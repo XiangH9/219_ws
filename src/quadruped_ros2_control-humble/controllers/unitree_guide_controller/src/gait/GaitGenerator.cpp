@@ -82,11 +82,18 @@ void GaitGenerator::generate(Vec34 &feet_pos, Vec34 &feet_vel) {
 
                 // FR FL RR RL
                 static const double stand_q[4][3] = {
-                    {0.0, 0.9, -1.53},  // FR
-                    {0.0, 0.9, -1.53},  // FL
-                    {0.0, 0.9, -1.53},  // RR
-                    {0.0, 0.9, -1.53}   // RL
+                    {0.0, 0.88, -1.55},  // FR
+                    {0.0, 0.88, -1.55},  // FL
+                    {0.0, 0.88, -1.55},  // RR
+                    {0.0, 0.88, -1.55}   // RL
                 };
+                // Previous values for rollback:
+                // static const double stand_q[4][3] = {
+                //     {0.0, 0.9, -1.53},
+                //     {0.0, 0.9, -1.53},
+                //     {0.0, 0.9, -1.53},
+                //     {0.0, 0.9, -1.53}
+                // };
 
                 fixed_q(0) = stand_q[i][0];
                 fixed_q(1) = stand_q[i][1];

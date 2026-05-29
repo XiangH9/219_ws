@@ -10,8 +10,10 @@
 #include "quadProgpp/QuadProg++.hh"
 
 BalanceCtrl::BalanceCtrl(const std::shared_ptr<QuadrupedRobot> &robot) {
-    // mass_ = robot->mass_;
-    mass_ = 40.5;
+    // GO2 URDF-derived total mass (sum of link inertias in go2_description).
+    mass_ = 15.098;
+    // GO1 / previous tuned value for quick rollback:
+    // mass_ = 40.5;
 
     alpha_ = 0.001;
     beta_ = 0.001; //由0.1增大到0.2，越大运动越平滑，越小越激进
@@ -20,10 +22,13 @@ BalanceCtrl::BalanceCtrl(const std::shared_ptr<QuadrupedRobot> &robot) {
     friction_mat_ << 1, 0, friction_ratio_, -1, 0, friction_ratio_, 0, 1, friction_ratio_, 0, -1,
             friction_ratio_, 0, 0, 1;
 
-    pcb_ = Vec3(0.0, 0.0, 0.0);  //修改了质心位置，原本0 0 0 注意，这里的pcb_是质心位置，这个变量是balance控制器内部的private参数，和troting的pcb_没有关系了。
-    // pcb_ = Vec3(-0.10, -0.02, -0.04);
-    // Ib_ = Vec3(0.0792, 0.2085, 0.2265).asDiagonal(); // 原来宇树的参数
-    Ib_ = Vec3(0.624, 2.683, 2.934).asDiagonal(); // 暂定的参数
+    // GO2 trunk COM / inertia from go2_description trunk inertial block.
+    pcb_ = Vec3(0.021112, 0.0, -0.005366);
+    Ib_ = Vec3(0.02448, 0.098077, 0.107).asDiagonal();
+
+    // GO1 / previous tuned values for quick rollback:
+    // pcb_ = Vec3(0.0, 0.0, 0.0);
+    // Ib_ = Vec3(0.624, 2.683, 2.934).asDiagonal();
 
     Vec6 s;
     Vec12 w, u;

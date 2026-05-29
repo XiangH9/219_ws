@@ -93,6 +93,8 @@ private:
     Vec34 pos_feet_goal_G, vel_feet_goal_G;
     double hip_q_range; // 髋关节范围限制
     double hip_qd_range; // 髋关节速度限制
+    double thigh_qd_range; // 大腿关节速度限制
+    double calf_qd_range; // 小腿关节速度限制
 
     RotMat Rd;  // 期望的躯体姿态的B2G旋转矩阵
 
@@ -134,6 +136,7 @@ private:
     // MPC足底接触点是否已经初始化
     // 第一次进入 trotting 后，先初始化一次所有腿的足底点
     bool mpc_foot_hold_initialized_ = false;
+    bool has_logged_stance_all_kinematics_snapshot_ = false;
 
 };
 
